@@ -136,7 +136,7 @@
 
         <!-- GUI dependencies -->
         <jpen.version>2-150301</jpen.version>
-        <jide.version>3.7.13</jide.version>
+        <jide.version>3.5.15</jide.version>
         <laf-dark.version>201403101706</laf-dark.version>
         <bridj.version>0.7.0</bridj.version>
         <logback.version>1.2.11</logback.version>
@@ -146,7 +146,7 @@
         <junit.version>4.13.2</junit.version>
 
         <!-- Build dependencies -->
-        <lombok.version>1.18.22</lombok.version>
+        <lombok.version>1.18.30</lombok.version>
 
         <!-- Maven plugin versions -->
         <maven-enforcer-plugin.version>3.3.0</maven-enforcer-plugin.version>
