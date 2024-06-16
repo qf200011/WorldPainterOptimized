@@ -29,6 +29,8 @@ import java.io.File;
 import java.io.IOException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.*;
 import java.util.Map.Entry;
@@ -236,7 +238,7 @@ public abstract class AbstractWorldExporter implements WorldExporter {
             try {
                 // Export each individual region
                 for (Point region: sortedRegions) {
-                    final ExecutorService gpuExecutor = createGPUExecutorService("calculating", 1);
+                    final ExecutorService gpuExecutor = createGPUExecutorService("calculating", 2);
                     final Point regionCoords = region;
                     executor.execute(() -> {
                         if (abort.get()) {
@@ -261,7 +263,6 @@ public abstract class AbstractWorldExporter implements WorldExporter {
                             final WorldPainterChunkFactory ceilingChunkFactory = (ceiling != null) ? new WorldPainterChunkFactory(ceiling, ceilingExporters, platform, maxHeight) : null;
 
 
-
                             if (NoiseHardwareAccelerator.isGPUEnabled) {
                                 for (Layer layer : exporters.keySet()) {
                                     if (layer.toString().equals("Resources")) {
@@ -275,8 +276,12 @@ public abstract class AbstractWorldExporter implements WorldExporter {
 
                                                 if (index==0) System.out.println("GPU Created!!!");
                                             gpuExecutor.execute(() ->{
-
+                                                Instant startTime = Instant.now();
                                                     noiseHardwareAccelerator.addCalculatedNoiseForRegion(regionCoords, index,threadId);
+                                                Instant endTime = Instant.now();
+                                                long timeElapsed = Duration.between(startTime,endTime).toMillis();
+                                                System.out.println();
+                                                System.out.println(timeElapsed);
                                             });
                                         }
 
@@ -287,6 +292,7 @@ public abstract class AbstractWorldExporter implements WorldExporter {
                                 }
 
                             }
+
 
                             WorldRegion worldRegion = new WorldRegion(regionCoords.x, regionCoords.y, minHeight, maxHeight, platform);
                             ExportResults exportResults = null;

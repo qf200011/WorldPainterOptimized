@@ -23,13 +23,13 @@
 #define X_ARRAY_SIZE 680
 #define Y_ARRAY_SIZE 680
 
-cudaError_t noiseWithCuda(int* p, float* regionArrayX, float* regionArrayY, float* regionArrayZ, float* output, int totalHeight, long long& dev_regionArrayXPtr, long long& dev_regionArrayYPtr, long long& dev_regionArrayZPtr, long long& dev_pPtr, long long& dev_outputPtr);
+cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* regionArrayY, float* regionArrayZ, byte* output, int totalHeight, long long& dev_regionArrayXPtr, long long& dev_regionArrayYPtr, long long& dev_regionArrayZPtr, long long& dev_pPtr, long long& dev_outputPtr);
 void getRegionArray(float* regionArrayX, float* regionArrayY, float* regionArrayZ, int minHeight, int maxHeight, int regionX, int regionY);
 void getPArray(int* p, JNIEnv* env, jlong seed);
 void swap(int* array, int index1, int index2);
 
 
-__global__ void generateNoise(int* p, float* regionArrayX, float* regionArrayY, float* regionArrayZ, float *output, int totalHeight)
+__global__ void generateNoise(int* p, float* chances, float* regionArrayX, float* regionArrayY, float* regionArrayZ, byte *output, int totalHeight)
 {
     /*int x=128;
     int y=128;
@@ -46,7 +46,55 @@ __global__ void generateNoise(int* p, float* regionArrayX, float* regionArrayY, 
         printf("(%d + %d  * %d ) + (%d  * %d )", blockIdx.x, blockIdx.y, Y_ARRAY_SIZE, threadIdx.x, Z_ARRAY_SIZE);
     }*/
 
-    output[blockIdx.x + (blockIdx.y * X_ARRAY_SIZE) + (threadIdx.x * X_ARRAY_SIZE * totalHeight)] = getPerlinNoiseAt(regionArrayX[blockIdx.x], regionArrayY[blockIdx.y], regionArrayZ[threadIdx.x], p);
+    float outputNoise = getPerlinNoiseAt(regionArrayX[blockIdx.x], regionArrayY[blockIdx.y], regionArrayZ[threadIdx.x], p);
+
+
+    bool shouldSetMaterial = outputNoise >= chances[8];
+
+
+
+    int index = blockIdx.x + (blockIdx.y * X_ARRAY_SIZE) + (threadIdx.x * X_ARRAY_SIZE * totalHeight);
+    int byteIndex = index / 8;
+    int bitIndex = index % 8;
+
+    if (shouldSetMaterial && bitIndex == 0) {
+        output[byteIndex] |= (1 << bitIndex);
+    }
+    __syncthreads();
+    if (shouldSetMaterial && bitIndex == 1) {
+        output[byteIndex] |= (1 << bitIndex);
+       
+    }
+    __syncthreads();
+    if (shouldSetMaterial && bitIndex == 2) {
+        output[byteIndex] |= (1 << bitIndex);
+        
+    }
+    __syncthreads();
+    if (shouldSetMaterial && bitIndex == 3) {
+        output[byteIndex] |= (1 << bitIndex);
+        
+    }
+    __syncthreads();
+    if (shouldSetMaterial && bitIndex == 4) {
+        output[byteIndex] |= (1 << bitIndex);
+        
+    }
+    __syncthreads();
+    if (shouldSetMaterial && bitIndex == 5) {
+        output[byteIndex] |= (1 << bitIndex);
+        
+    }
+    __syncthreads();
+    if (shouldSetMaterial && bitIndex == 6) {
+        output[byteIndex] |= (1 << bitIndex);
+        
+    }
+    __syncthreads();
+    if (shouldSetMaterial && bitIndex == 7) {
+        output[byteIndex] |= (1 << bitIndex);
+        output[blockIdx.x + (blockIdx.y * X_ARRAY_SIZE) + (threadIdx.x * X_ARRAY_SIZE * totalHeight)];
+    }
 
 }
 
@@ -99,7 +147,7 @@ int main()
 }
 
 // Helper function for using CUDA to add vectors in parallel.
-cudaError_t noiseWithCuda(int* p, float* regionArrayX, float* regionArrayY, float* regionArrayZ, float*  output,int totalHeight, long long &dev_regionArrayXPtr, long long &dev_regionArrayYPtr, long long& dev_regionArrayZPtr, long long& dev_pPtr, long long &dev_outputPtr)
+cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* regionArrayY, float* regionArrayZ, byte*  output,int totalHeight, long long &dev_regionArrayXPtr, long long &dev_regionArrayYPtr, long long& dev_regionArrayZPtr, long long& dev_pPtr, long long &dev_outputPtr)
 {
     std::clock_t c_start = std::clock();
 
@@ -107,7 +155,8 @@ cudaError_t noiseWithCuda(int* p, float* regionArrayX, float* regionArrayY, floa
     float* dev_regionArrayX;
     float* dev_regionArrayY;
     float* dev_regionArrayZ;
-    float* dev_output;
+    byte* dev_output;
+    float* dev_chances;
 
     cudaError_t cudaStatus;
     auto t_start = std::chrono::high_resolution_clock::now();
@@ -127,6 +176,12 @@ cudaError_t noiseWithCuda(int* p, float* regionArrayX, float* regionArrayY, floa
     }
     else { //reuse
         dev_p = (int*)dev_pPtr;
+    }
+
+    cudaStatus = cudaMalloc((void**)&dev_chances, 16 * sizeof(float));
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMalloc failed!");
+        goto Error;
     }
 
     if (dev_regionArrayXPtr==0){
@@ -165,18 +220,25 @@ cudaError_t noiseWithCuda(int* p, float* regionArrayX, float* regionArrayY, floa
 
     if (dev_outputPtr==0)
     {
-        cudaStatus = cudaMalloc((void**)&dev_output, X_ARRAY_SIZE * Y_ARRAY_SIZE * totalHeight * sizeof(float));
+        cudaStatus = cudaMalloc((void**)&dev_output, (X_ARRAY_SIZE * Y_ARRAY_SIZE * totalHeight)); //going to be bits
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "cudaMalloc failed!");
             goto Error;
         }
     }
     else { //reuse
-        dev_output = (float*)dev_outputPtr;
+        dev_output = (byte*)dev_outputPtr;
     }
 
     // Copy input vectors from host memory to GPU buffers.
     cudaStatus = cudaMemcpy(dev_p, p, 512 * sizeof(int), cudaMemcpyHostToDevice);
+    if (cudaStatus != cudaSuccess) {
+        fprintf(stderr, "cudaMemcpy failed!", cudaGetErrorString(cudaStatus));
+        goto Error;
+    }
+
+    // Copy input vectors from host memory to GPU buffers.
+    cudaStatus = cudaMemcpy(dev_chances, chances, 16 * sizeof(float), cudaMemcpyHostToDevice);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMemcpy failed!", cudaGetErrorString(cudaStatus));
         goto Error;
@@ -211,7 +273,7 @@ cudaError_t noiseWithCuda(int* p, float* regionArrayX, float* regionArrayY, floa
     cudaStream_t stream;
     cudaStreamCreate(&stream);
     dim3 gridShape(X_ARRAY_SIZE, Y_ARRAY_SIZE, 1);
-    generateNoise <<<gridShape, totalHeight,0, stream >>>(dev_p, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output,totalHeight);
+    generateNoise <<<gridShape, totalHeight,0, stream >>>(dev_p,dev_chances, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output,totalHeight);
 
     // Check for any errors launching the kernel
     cudaStatus = cudaGetLastError();
@@ -258,7 +320,7 @@ cudaError_t noiseWithCuda(int* p, float* regionArrayX, float* regionArrayY, floa
     //printf("Finished computing: %f\n", elapsed_time_ms);
 
     // Copy output vector from GPU buffer to host memory.
-    cudaStatus = cudaMemcpy(output, dev_output, X_ARRAY_SIZE * Y_ARRAY_SIZE * totalHeight * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaStatus = cudaMemcpy(output, dev_output, (X_ARRAY_SIZE * Y_ARRAY_SIZE * totalHeight)/8, cudaMemcpyDeviceToHost);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMemcpy failed!", cudaGetErrorString(cudaStatus));
         goto Error;
@@ -274,6 +336,8 @@ Error:
     cudaFree(dev_regionArrayY);
     cudaFree(dev_regionArrayZ);
     cudaFree(dev_output);*/
+
+    cudaFree(dev_chances);
     
     return cudaStatus;
 }
@@ -347,14 +411,43 @@ void swap(int* array, int index1, int index2) {
     array[index2] = temp;
 }
 
-jobject createResponse(JNIEnv* env, long long dev_regionXPtr, long long dev_regionYPtr, long long dev_regionZPtr, long long dev_pPtr, long long dev_outputPtr,float* output, int totalHeight) {
+void getDataFromRequest(JNIEnv* env, jobject request, jlong& materialSeed, jint& regionX, jint& regionY, jint& materialMinHeight, jint& materialMaxHeight, jlong& regionXPtr, jlong& regionYPtr, jlong& regionZPtr, jlong& pPtr, jlong& outputPtr, byte*& outputArray, float*& chances) {
+    jclass noiseHardwareAcceleratorRequestClass = env->FindClass("org/pepsoft/worldpainter/exporting/NoiseHardwareAcceleratorRequest");
+
+    jmethodID getMaterialSeedMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getMaterialSeed", "()J");
+    jmethodID getRegionXMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getRegionX", "()I");
+    jmethodID getRegionYMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getRegionY", "()I");
+    jmethodID getMaterialMinHeightMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getMaterialMinHeight", "()I");
+    jmethodID getMaterialMaxHeightMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getMaterialMaxHeight", "()I");
+    jmethodID getRegionXPtrMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getRegionXPtr", "()J");
+    jmethodID getRegionYPtrMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getRegionYPtr", "()J");
+    jmethodID getRegionZPtrMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getRegionZPtr", "()J");
+    jmethodID getpPtrMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getpPtr", "()J");
+    jmethodID getOutputPtrMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getOutputPtr", "()J");
+    jmethodID getOutputArrayMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getOutputArray", "()Ljava/nio/ByteBuffer;");
+    jmethodID getChancesMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getChances", "()[F");
+
+    materialSeed = env->CallLongMethod(request, getMaterialSeedMethod);
+    regionX = env->CallIntMethod(request, getRegionXMethod);
+    regionY = env->CallIntMethod(request, getRegionYMethod);
+    materialMinHeight = env->CallIntMethod(request, getMaterialMinHeightMethod);
+    materialMaxHeight = env->CallIntMethod(request, getMaterialMaxHeightMethod);
+    regionXPtr = env->CallLongMethod(request, getRegionXPtrMethod);
+    regionYPtr = env->CallLongMethod(request, getRegionYPtrMethod);
+    regionZPtr = env->CallLongMethod(request, getRegionZPtrMethod);
+    pPtr = env->CallLongMethod(request, getpPtrMethod);
+    outputPtr = env->CallLongMethod(request, getOutputPtrMethod);
+    jobject outputArrayBuffer =  env->CallObjectMethod(request, getOutputArrayMethod);
+    outputArray = (byte*) env->GetDirectBufferAddress(outputArrayBuffer);
+    jfloatArray chancesArray = (jfloatArray)env->CallObjectMethod(request, getChancesMethod);
+    chances = env->GetFloatArrayElements(chancesArray, 0);
+}
+
+
+jobject createResponse(JNIEnv* env, long long dev_regionXPtr, long long dev_regionYPtr, long long dev_regionZPtr, long long dev_pPtr, long long dev_outputPtr, int totalHeight) {
     jclass noiseHardwareAcceleratorResponseClass = env->FindClass("org/pepsoft/worldpainter/exporting/NoiseHardwareAcceleratorResponse");
 
     jmethodID constructorMethod = env->GetMethodID(noiseHardwareAcceleratorResponseClass, "<init>", "([FJJJJJ)V");
-
-    jfloatArray result;
-    result = env->NewFloatArray(X_ARRAY_SIZE * Y_ARRAY_SIZE * totalHeight);
-    env->SetFloatArrayRegion(result, 0, X_ARRAY_SIZE * Y_ARRAY_SIZE * totalHeight, output);
 
     jlong pPtr= (jlong) dev_pPtr;
     jlong regionXPtr= (jlong) dev_regionXPtr;
@@ -362,37 +455,51 @@ jobject createResponse(JNIEnv* env, long long dev_regionXPtr, long long dev_regi
     jlong regionZPtr = (jlong) dev_regionZPtr;
     jlong outputPtr = (jlong) dev_outputPtr;
 
-    jobject response = env->NewObject(noiseHardwareAcceleratorResponseClass, constructorMethod, result, regionXPtr, regionYPtr, regionZPtr, pPtr, outputPtr);
+    jobject response = env->NewObject(noiseHardwareAcceleratorResponseClass, constructorMethod, NULL, regionXPtr, regionYPtr, regionZPtr, pPtr, outputPtr);
 
     return response;
 }
 
-JNIEXPORT JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_NoiseHardwareAccelerator_getRegionNoiseData(JNIEnv* env, jclass cls, jlong seed, jint regionX, jint regionY, jint minHeight, jint maxHeight, jlong dev_regionXPtr, jlong dev_regionYPtr, jlong dev_regionZPtr, jlong dev_pPtr, jlong dev_outputPtr) {
+JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_NoiseHardwareAccelerator_getRegionNoiseData (JNIEnv* env, jclass , jobject request) {
     auto t_start = std::chrono::high_resolution_clock::now();
     std::clock_t c_start = std::clock();
-    const int totalHeight = maxHeight - minHeight;
+
+    jlong materialSeed;
+    jint regionX;
+    jint regionY;
+    jint materialMinHeight;
+    jint materialMaxHeight;
+    jlong dev_regionXPtr;
+    jlong dev_regionYPtr;
+    jlong dev_regionZPtr;
+    jlong dev_pPtr;
+    jlong dev_outputPtr;
+    byte* outputArray;
+    float* chances;
+
+    getDataFromRequest(env, request, materialSeed, regionX, regionY, materialMinHeight, materialMaxHeight, dev_regionXPtr, dev_regionYPtr, dev_regionZPtr, dev_pPtr, dev_outputPtr, outputArray, chances);
+
+
+    const int totalHeight = materialMaxHeight - materialMinHeight;
 
     float regionArrayX[X_ARRAY_SIZE]; //dx
     float regionArrayY[Y_ARRAY_SIZE]; //dy
     float*  regionArrayZ; //dz but shifted
     int p[512];
-    float* output;
     //[TILE_SIZE * TILES_PER_REGION_AXIS] [TILE_SIZE * TILES_PER_REGION_AXIS] [totalHeight]
-    output = new float[X_ARRAY_SIZE * Y_ARRAY_SIZE * totalHeight];
     regionArrayZ = new float[totalHeight];
-    getRegionArray(regionArrayX, regionArrayY, regionArrayZ, minHeight,maxHeight, regionX, regionY);
+    getRegionArray(regionArrayX, regionArrayY, regionArrayZ, materialMaxHeight,materialMinHeight, regionX, regionY);
 
     
-    getPArray(p,env,seed);
+    getPArray(p,env,materialSeed);
     //double test = getPerlinNoiseAt(regionArrayX[128], regionArrayY[128], regionArrayZ[60 + 64],p);
     
 
     // Add vectors in parallel.
 
-    cudaError_t cudaStatus = noiseWithCuda(p, regionArrayX, regionArrayY, regionArrayZ, output,totalHeight,dev_regionXPtr, dev_regionYPtr, dev_regionZPtr, dev_pPtr, dev_outputPtr);
+    cudaError_t cudaStatus = noiseWithCuda(p,chances, regionArrayX, regionArrayY, regionArrayZ, outputArray,totalHeight,dev_regionXPtr, dev_regionYPtr, dev_regionZPtr, dev_pPtr, dev_outputPtr);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "addWithCuda failed!");
-        delete[] output;
         delete[] regionArrayZ;
         return NULL;
     }
@@ -400,8 +507,6 @@ JNIEXPORT JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_Nois
     std::clock_t c_end = std::clock();
     double time_elapsed_ms = 1000.0 * (c_end - c_start) / CLOCKS_PER_SEC;
     //printf("Clocktime: %lf\n", time_elapsed_ms);
-
-    double test = output[(61 + 64) * 192];
 
     // cudaDeviceReset must be called before exiting in order for profiling and
     // tracing tools such as Nsight and Visual Profiler to show complete traces.
@@ -411,9 +516,8 @@ JNIEXPORT JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_Nois
         return NULL;
     }*/
     
-    jobject result = createResponse(env,dev_regionXPtr, dev_regionYPtr, dev_regionZPtr, dev_pPtr,dev_outputPtr, output, totalHeight);
-    
-    delete[] output;
+    jobject result = createResponse(env,dev_regionXPtr, dev_regionYPtr, dev_regionZPtr, dev_pPtr,dev_outputPtr, totalHeight);
+   
     delete[] regionArrayZ;
 
     auto t_end = std::chrono::high_resolution_clock::now();

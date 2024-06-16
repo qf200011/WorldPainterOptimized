@@ -1,16 +1,18 @@
 package org.pepsoft.worldpainter.exporting;
 
 import org.pepsoft.minecraft.Material;
+import org.pepsoft.util.PerlinNoise;
 import org.pepsoft.worldpainter.layers.exporters.ResourcesExporter;
 
 import java.awt.*;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 
 public final class NoiseHardwareAccelerator {
     static {
         try {
-            System.load("C:\\Development\\NoiseHardwareAccelerator\\x64\\Debug\\NoiseHardwareAccelerator.dll");
+            System.load("C:\\Development\\WorldPainterGPU\\WorldPainter\\NoiseHardwareAccelerator\\x64\\Debug\\NoiseHardwareAccelerator.dll");
             System.out.println("Library loaded successfully!");
         } catch (UnsatisfiedLinkError e) {
             System.err.println("Native code library failed to load. \n" + e);
@@ -155,6 +157,36 @@ public final class NoiseHardwareAccelerator {
                 }
             }
         }
+
+
+    }
+
+    public NoiseHardwareAcceleratorRequest getNoiseHardwareRequest(Point regionCoords, long threadId, int materialIndex){
+        long xRegionArrayPointer=this.availableGPUMemoryController.getXGPUMemoryPointer(threadId,materialIndex);
+        long yRegionArrayPointer=this.availableGPUMemoryController.getYGPUMemoryPointer(threadId,materialIndex);
+        long zRegionArrayPointer=this.availableGPUMemoryController.getZGPUMemoryPointer(threadId,materialIndex);
+        long pArrayPointer=this.availableGPUMemoryController.getPGPUMemoryPointer(threadId,materialIndex);
+        long outputArrayPointer=this.availableGPUMemoryController.getOutputGPUMemoryPointer(threadId,materialIndex);
+
+        ResourcesExporter resourcesExporter = this.regionExporters.get(regionCoords);
+        if (resourcesExporter==null){
+            return null;
+        }
+
+        long materialSeed=resourcesExporter.noiseGenerators[materialIndex].getSeed();
+        int materialMaxHeight = resourcesExporter.maxLevels[materialIndex];
+        int materialMinHeight= resourcesExporter.minLevels[materialIndex];
+       ResourcesExporter.ResourcesExporterSettings resourceSettings= (ResourcesExporter.ResourcesExporterSettings) resourcesExporter.settings;
+
+       float[] materialChances = new float[16];
+
+       for (int i=0; i<16; i++){
+               materialChances[i] = PerlinNoise.getLevelForPromillage(Math.min(resourceSettings.getChance(resourcesExporter.activeMaterials[materialIndex]) * i / 8f, 1000f));
+       }
+
+        ByteBuffer output = ByteBuffer.allocateDirect(680*680*(materialMaxHeight-materialMinHeight)); //one bit for each block to determine if it should or shouldn't place a block of a material type.
+
+        return new NoiseHardwareAcceleratorRequest(materialSeed,regionCoords.x,regionCoords.y,materialMinHeight, materialMaxHeight,xRegionArrayPointer,yRegionArrayPointer,zRegionArrayPointer,pArrayPointer,outputArrayPointer,output,materialChances);
     }
 
     public static NoiseHardwareAccelerator getInstance(){
@@ -166,11 +198,11 @@ public final class NoiseHardwareAccelerator {
 
     public final static boolean isGPUEnabled =true;
 
-    public final  static int gpuThreads =3;
+    public final  static int gpuThreads =8;
 
-    public native static NoiseHardwareAcceleratorResponse getRegionNoiseData(long seed, int regionX, int regionY,int minHeight, int MaxHeight,long regionXArrayPtr,long regionYArrayPtr,long regionZArrayPtr, long pArrayPtr, long outputArrayPtr);
+    public native static NoiseHardwareAcceleratorResponse getRegionNoiseData(NoiseHardwareAcceleratorRequest request);
 
-    public HashMap<Point,HashMap<Material,float[]>> calculatedNoises;
+    public HashMap<Point,HashMap<Integer,ByteBuffer>> calculatedNoises;
 
     private HashMap<Point, ResourcesExporter> regionExporters;
 
@@ -201,25 +233,28 @@ public final class NoiseHardwareAccelerator {
             return;
         }
 
-        long xRegionArrayPointer=this.availableGPUMemoryController.getXGPUMemoryPointer(threadId,materialIndex);
-        long yRegionArrayPointer=this.availableGPUMemoryController.getYGPUMemoryPointer(threadId,materialIndex);
-        long zRegionArrayPointer=this.availableGPUMemoryController.getZGPUMemoryPointer(threadId,materialIndex);
-        long pArrayPointer=this.availableGPUMemoryController.getPGPUMemoryPointer(threadId,materialIndex);
-        long outputArrayPointer=this.availableGPUMemoryController.getOutputGPUMemoryPointer(threadId,materialIndex);
+        NoiseHardwareAcceleratorRequest noiseHardwareAcceleratorRequest = this.getNoiseHardwareRequest(regionCoords,threadId,materialIndex);
 
-        long seed = resourcesExporter.noiseGenerators[materialIndex].getSeed();
-        NoiseHardwareAcceleratorResponse response=NoiseHardwareAccelerator.getRegionNoiseData(seed, regionCoords.x, regionCoords.y, resourcesExporter.minLevels[materialIndex], resourcesExporter.maxLevels[materialIndex] + 1,xRegionArrayPointer,yRegionArrayPointer,zRegionArrayPointer,pArrayPointer,outputArrayPointer);
+        NoiseHardwareAcceleratorResponse response=NoiseHardwareAccelerator.getRegionNoiseData(noiseHardwareAcceleratorRequest);
 
-        float[] results=response.getOutput();
+        ByteBuffer outputByteBuffer=noiseHardwareAcceleratorRequest.getOutputArray();
+
+        if (outputByteBuffer==null){
+            return;
+        }
 
         this.availableGPUMemoryController.setGPUMemoryPointers(threadId,materialIndex,response);
 
+        this.setCalculatedNoises(materialIndex,regionCoords,outputByteBuffer);
+    }
+
+    private synchronized void setCalculatedNoises(Integer materialIndex,Point regionCoords, ByteBuffer outputByteBuffer){
         if (this.calculatedNoises.containsKey(regionCoords)){
-            this.calculatedNoises.get(regionCoords).put(resourcesExporter.activeMaterials[materialIndex], results);
+            this.calculatedNoises.get(regionCoords).put(materialIndex, outputByteBuffer);
         }
         else{
-            HashMap<Material, float[]> innerMap = new HashMap<Material, float[]>();
-            innerMap.put(resourcesExporter.activeMaterials[materialIndex], results);
+            HashMap<Integer, ByteBuffer> innerMap = new HashMap<Integer, ByteBuffer>();
+            innerMap.put(materialIndex, outputByteBuffer);
             this.calculatedNoises.put(regionCoords, innerMap);
         }
     }

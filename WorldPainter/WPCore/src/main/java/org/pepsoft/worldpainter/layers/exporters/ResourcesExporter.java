@@ -23,6 +23,7 @@ import java.awt.*;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
+import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.List;
 
@@ -81,14 +82,25 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
         final boolean coverSteepTerrain = dimension.isCoverSteepTerrain(), nether = (dimension.getAnchor().dim == DIM_NETHER);
 
         boolean hasGPUNoise=false;
-        HashMap<Material,float[]> regionNoise= null;
+
+        ByteBuffer[] regionNoise=new ByteBuffer[activeMaterials.length];
+
+
 
         NoiseHardwareAccelerator noiseHardwareAccelerator = NoiseHardwareAccelerator.getInstance();
 
+        HashMap<Integer,ByteBuffer> regionNoiseMap=null;
         if (NoiseHardwareAccelerator.isGPUEnabled&&regionCoords!=null&&noiseHardwareAccelerator.calculatedNoises.containsKey(regionCoords)){
             hasGPUNoise=true;
-            regionNoise=(HashMap<Material,float[]>) noiseHardwareAccelerator.calculatedNoises.get(regionNoise);
+            regionNoiseMap=(HashMap<Integer,ByteBuffer>) noiseHardwareAccelerator.calculatedNoises.get(regionCoords);
         }
+
+        if (regionNoiseMap!=null){
+            for (int i=0; i< activeMaterials.length; i++){
+                regionNoise[i]=regionNoiseMap.get(i);
+            }
+        }
+
 //        int[] counts = new int[256];
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
@@ -138,7 +150,29 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
 
                                  else{
                                          if (hasGPUNoise&&regionNoise!=null) {
-                                             noise = regionNoise.get(activeMaterials[i])[(x) + ((z) * 680) + ((y-minLevels[i]) * 680 * 680)];
+                                             noise=0;
+                                             int index=(x) + ((z) * 680) + ((y-minLevels[i]) * 680 * 680);
+                                             int byteIndex=index/8;
+                                             int bitIndex=index%8;
+
+                                             if (regionNoise[i]==null){
+                                                 System.out.println("Ruh Roh");
+                                             }
+
+                                             byte regionNoiseByteAtIndex=regionNoise[i].get(byteIndex);
+                                             boolean shouldSetMaterial=((regionNoiseByteAtIndex >> bitIndex) & 1)==1;
+
+                                             if (shouldSetMaterial){
+                                                 final Material existingMaterial = chunk.getMaterial(x, y, z);
+                                                 if (existingMaterial.isNamed(MC_DEEPSLATE) && ORE_TO_DEEPSLATE_VARIANT.containsKey(activeMaterials[i].name)) {
+                                                     chunk.setMaterial(x, y, z, ORE_TO_DEEPSLATE_VARIANT.get(activeMaterials[i].name));
+                                                 } else if (nether && (activeMaterials[i].isNamed(MC_GOLD_ORE))) {
+                                                     chunk.setMaterial(x, y, z, NETHER_GOLD_ORE);
+                                                 } else {
+                                                     chunk.setMaterial(x, y, z, activeMaterials[i]);
+                                                 }
+                                                 break;
+                                             }
                                          } else {
                                              noise = noiseGenerators[i].getPerlinNoise(dx, dy, dz);
                                      }

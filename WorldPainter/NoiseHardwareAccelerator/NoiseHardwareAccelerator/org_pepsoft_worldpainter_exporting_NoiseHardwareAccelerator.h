@@ -10,14 +10,14 @@ extern "C" {
 #undef org_pepsoft_worldpainter_exporting_NoiseHardwareAccelerator_isGPUEnabled
 #define org_pepsoft_worldpainter_exporting_NoiseHardwareAccelerator_isGPUEnabled 1L
 #undef org_pepsoft_worldpainter_exporting_NoiseHardwareAccelerator_gpuThreads
-#define org_pepsoft_worldpainter_exporting_NoiseHardwareAccelerator_gpuThreads 1L
+#define org_pepsoft_worldpainter_exporting_NoiseHardwareAccelerator_gpuThreads 3L
 /*
  * Class:     org_pepsoft_worldpainter_exporting_NoiseHardwareAccelerator
  * Method:    getRegionNoiseData
- * Signature: (JIIIIJJJJJ)Lorg/pepsoft/worldpainter/exporting/NoiseHardwareAcceleratorResponse;
+ * Signature: (Lorg/pepsoft/worldpainter/exporting/NoiseHardwareAcceleratorRequest;)Lorg/pepsoft/worldpainter/exporting/NoiseHardwareAcceleratorResponse;
  */
 JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_NoiseHardwareAccelerator_getRegionNoiseData
-  (JNIEnv *, jclass, jlong, jint, jint, jint, jint, jlong, jlong, jlong, jlong, jlong);
+  (JNIEnv *, jclass, jobject);
 
 #ifdef __cplusplus
 }
