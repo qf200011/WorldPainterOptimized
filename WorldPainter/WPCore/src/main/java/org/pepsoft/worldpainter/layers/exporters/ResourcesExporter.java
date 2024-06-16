@@ -155,10 +155,6 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
                                              int byteIndex=index/8;
                                              int bitIndex=index%8;
 
-                                             if (regionNoise[i]==null){
-                                                 System.out.println("Ruh Roh");
-                                             }
-
                                              byte regionNoiseByteAtIndex=regionNoise[i].get(byteIndex);
                                              boolean shouldSetMaterial=((regionNoiseByteAtIndex >> bitIndex) & 1)==1;
 
