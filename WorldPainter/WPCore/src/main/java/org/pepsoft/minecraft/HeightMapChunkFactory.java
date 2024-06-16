@@ -5,6 +5,8 @@
 
 package org.pepsoft.minecraft;
 
+import java.awt.*;
+
 import static org.pepsoft.minecraft.Constants.VERSION_MCREGION;
 import static org.pepsoft.minecraft.Material.*;
 
@@ -29,7 +31,7 @@ public abstract class HeightMapChunkFactory implements ChunkFactory {
     }
     
     @Override
-    public final ChunkCreationResult createChunk(int chunkX, int chunkZ) {
+    public final ChunkCreationResult createChunk(int chunkX, int chunkZ, Point regionCoords) {
         final ChunkCreationResult result = new ChunkCreationResult();
         result.chunk = (version == VERSION_MCREGION) ? new MCRegionChunk(chunkX, chunkZ, maxHeight) : new MC12AnvilChunk(chunkX, chunkZ, maxHeight);
         final int maxY = maxHeight - 1;

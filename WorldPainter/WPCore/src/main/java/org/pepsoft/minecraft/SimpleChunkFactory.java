@@ -5,6 +5,8 @@
 
 package org.pepsoft.minecraft;
 
+import java.awt.*;
+
 import static org.pepsoft.minecraft.Constants.*;
 
 /**
@@ -28,7 +30,7 @@ public class SimpleChunkFactory implements ChunkFactory {
     }
     
     @Override
-    public ChunkCreationResult createChunk(int chunkX, int chunkZ) {
+    public ChunkCreationResult createChunk(int chunkX, int chunkZ, Point regionCoords) {
         final ChunkCreationResult result = new ChunkCreationResult();
         result.chunk = (version == VERSION_MCREGION)
             ? new MCRegionChunk(chunkX, chunkZ, maxHeight)

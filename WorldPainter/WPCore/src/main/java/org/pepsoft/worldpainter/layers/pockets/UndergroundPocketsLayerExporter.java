@@ -8,9 +8,11 @@ import org.pepsoft.minecraft.Chunk;
 import org.pepsoft.util.MathUtils;
 import org.pepsoft.util.PerlinNoise;
 import org.pepsoft.worldpainter.*;
+import org.pepsoft.worldpainter.Dimension;
 import org.pepsoft.worldpainter.exporting.AbstractLayerExporter;
 import org.pepsoft.worldpainter.exporting.FirstPassLayerExporter;
 
+import java.awt.*;
 import java.awt.image.BufferedImage;
 
 import static org.pepsoft.worldpainter.Constants.TILE_SIZE_BITS;
@@ -31,7 +33,7 @@ public class UndergroundPocketsLayerExporter extends AbstractLayerExporter<Under
     }
 
     @Override
-    public void render(Tile tile, Chunk chunk) {
+    public void render(Tile tile, Chunk chunk, Point regionCoords) {
         final MixedMaterial material = layer.getMaterial();
         final Terrain terrain = layer.getTerrain();
         final boolean useMaterial = material != null;

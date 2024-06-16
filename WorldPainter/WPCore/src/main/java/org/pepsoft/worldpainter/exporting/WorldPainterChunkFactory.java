@@ -10,6 +10,7 @@ import org.pepsoft.minecraft.ChunkFactory;
 import org.pepsoft.minecraft.Material;
 import org.pepsoft.util.PerlinNoise;
 import org.pepsoft.worldpainter.*;
+import org.pepsoft.worldpainter.Dimension;
 import org.pepsoft.worldpainter.layers.*;
 import org.pepsoft.worldpainter.objects.WPObject;
 import org.pepsoft.worldpainter.plugins.BlockBasedPlatformProvider;
@@ -18,6 +19,7 @@ import org.pepsoft.worldpainter.util.BiomeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.awt.*;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -98,16 +100,16 @@ public class WorldPainterChunkFactory implements ChunkFactory {
     }
 
     @Override
-    public ChunkCreationResult createChunk(int chunkX, int chunkZ) {
+    public ChunkCreationResult createChunk(int chunkX, int chunkZ, Point regionCoords) {
         Tile tile = dimension.getTile(chunkX >> 3, chunkZ >> 3);
         if (tile != null) {
-            return createChunk(tile, chunkX, chunkZ);
+            return createChunk(tile, chunkX, chunkZ, regionCoords);
         } else {
             return null;
         }
     }
     
-    public ChunkCreationResult createChunk(Tile tile, int chunkX, int chunkZ) {
+    public ChunkCreationResult createChunk(Tile tile, int chunkX, int chunkZ, Point regionCoords) {
         if (tile.getBitLayerValue(ReadOnly.INSTANCE, (chunkX << 4) & TILE_SIZE_MASK, (chunkZ << 4) & TILE_SIZE_MASK)
                 || tile.getBitLayerValue(NotPresent.INSTANCE, (chunkX << 4) & TILE_SIZE_MASK, (chunkZ << 4) & TILE_SIZE_MASK)) {
             // Chunk is marked as read-only or not present; don't export or
@@ -227,7 +229,7 @@ public class WorldPainterChunkFactory implements ChunkFactory {
                     logger.trace("Exporting layer {} for chunk {},{}", layer, chunkX, chunkZ);
                 }
                 start = System.nanoTime();
-                ((FirstPassLayerExporter) layerExporter).render(tile, chunk);
+                ((FirstPassLayerExporter) layerExporter).render(tile, chunk,regionCoords);
                 result.stats.timings.put(layer, new AtomicLong(System.nanoTime() - start));
             }
         }

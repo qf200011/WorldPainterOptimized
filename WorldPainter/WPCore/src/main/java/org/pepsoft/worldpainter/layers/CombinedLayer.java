@@ -310,7 +310,7 @@ public class CombinedLayer extends CustomLayer implements LayerContainer {
         }
 
         @Override
-        public void render(Tile tile, Chunk chunk) {
+        public void render(Tile tile, Chunk chunk, Point regionCoords) {
             throw new UnsupportedOperationException();
         }
 

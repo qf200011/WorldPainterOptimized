@@ -49,7 +49,7 @@ public class GroundCoverLayerExporter extends AbstractLayerExporter<GroundCoverL
     }
     
     @Override
-    public void render(Tile tile, Chunk chunk) {
+    public void render(Tile tile, Chunk chunk, Point regionCoords) {
         if (noiseHeightMap != null) {
             noiseHeightMap.setSeed(dimension.getSeed());
         }

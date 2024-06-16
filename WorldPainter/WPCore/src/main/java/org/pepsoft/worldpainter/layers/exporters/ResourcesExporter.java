@@ -15,14 +15,18 @@ import org.pepsoft.worldpainter.Platform;
 import org.pepsoft.worldpainter.Tile;
 import org.pepsoft.worldpainter.exporting.AbstractLayerExporter;
 import org.pepsoft.worldpainter.exporting.FirstPassLayerExporter;
+import org.pepsoft.worldpainter.exporting.NoiseHardwareAccelerator;
 import org.pepsoft.worldpainter.layers.Resources;
 import org.pepsoft.worldpainter.layers.Void;
 
+import java.awt.*;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
 import java.util.*;
+import java.util.List;
 
+import static java.lang.Math.abs;
 import static org.pepsoft.minecraft.Constants.*;
 import static org.pepsoft.minecraft.Material.*;
 import static org.pepsoft.util.MathUtils.clamp;
@@ -70,11 +74,21 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
     }
 
     @Override
-    public void render(Tile tile, Chunk chunk) {
+    public void render(Tile tile, Chunk chunk, Point regionCoords) {
         final int minimumLevel = ((ResourcesExporterSettings) super.settings).getMinimumLevel();
         final int xOffset = (chunk.getxPos() & 7) << 4;
         final int zOffset = (chunk.getzPos() & 7) << 4;
         final boolean coverSteepTerrain = dimension.isCoverSteepTerrain(), nether = (dimension.getAnchor().dim == DIM_NETHER);
+
+        boolean hasGPUNoise=false;
+        HashMap<Material,float[]> regionNoise= null;
+
+        NoiseHardwareAccelerator noiseHardwareAccelerator = NoiseHardwareAccelerator.getInstance();
+
+        if (NoiseHardwareAccelerator.isGPUEnabled&&regionCoords!=null&&noiseHardwareAccelerator.calculatedNoises.containsKey(regionCoords)){
+            hasGPUNoise=true;
+            regionNoise=(HashMap<Material,float[]>) noiseHardwareAccelerator.calculatedNoises.get(regionNoise);
+        }
 //        int[] counts = new int[256];
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
@@ -106,12 +120,38 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
                         final double dirtZ = y / SMALL_BLOBS;
                         for (int i = 0; i < activeMaterials.length; i++) {
                             final float chance = chances[i][resourcesValue];
+
                             if ((chance <= 0.5f)
-                                    && (y >= minLevels[i])
-                                    && (y <= maxLevels[i])
-                                    && (activeMaterials[i].isNamedOneOf(MC_DIRT, MC_GRAVEL)
-                                        ? (noiseGenerators[i].getPerlinNoise(dirtX, dirtY, dirtZ) >= chance)
-                                        : (noiseGenerators[i].getPerlinNoise(dx, dy, dz) >= chance))) {
+                                && (y >= minLevels[i])
+                                && (y <= maxLevels[i]))
+                            {
+
+                             if (activeMaterials[i].isNamedOneOf(MC_DIRT, MC_GRAVEL))
+                             {
+                                 if (noiseGenerators[i].getPerlinNoise(dirtX, dirtY, dirtZ) < chance) continue;
+                             }
+                             else {
+                                 double noise;
+                                 if (!NoiseHardwareAccelerator.isGPUEnabled){
+                                     noise = noiseGenerators[i].getPerlinNoise(dx, dy, dz);
+                                 }
+
+                                 else{
+                                         if (hasGPUNoise&&regionNoise!=null) {
+                                             noise = regionNoise.get(activeMaterials[i])[(x) + ((z) * 680) + ((y-minLevels[i]) * 680 * 680)];
+                                         } else {
+                                             noise = noiseGenerators[i].getPerlinNoise(dx, dy, dz);
+                                     }
+
+                                 }
+                                 if (noise < chance){
+                                     continue;
+                                 }
+                             }
+
+
+
+
 //                                counts[oreType]++;
                                 final Material existingMaterial = chunk.getMaterial(x, y, z);
                                 if (existingMaterial.isNamed(MC_DEEPSLATE) && ORE_TO_DEEPSLATE_VARIANT.containsKey(activeMaterials[i].name)) {
@@ -139,9 +179,10 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
 
 //  TODO: resource frequenties onderzoeken met Statistics tool!
 
-    private final Material[] activeMaterials;
-    private final PerlinNoise[] noiseGenerators;
-    private final int[] minLevels, maxLevels;
+    //TODO keep this private and move the region arrays to the exporter classes. Java handles the data prep instead of c
+    public final Material[] activeMaterials;
+    public final PerlinNoise[] noiseGenerators;
+    public final int[] minLevels, maxLevels;
     private final float[][] chances;
 
     private static final Map<String, Material> ORE_TO_DEEPSLATE_VARIANT = ImmutableMap.of(

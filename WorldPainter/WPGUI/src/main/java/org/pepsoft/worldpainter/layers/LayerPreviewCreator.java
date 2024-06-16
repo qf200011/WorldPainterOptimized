@@ -166,7 +166,7 @@ public class LayerPreviewCreator {
         final WorldPainterChunkFactory chunkFactory = new WorldPainterChunkFactory(dimension, pass1Exporters, JAVA_ANVIL_1_17, previewHeight);
         for (int x = 0; x < 8; x++) {
             for (int y = 0; y < 8; y++) {
-                final ChunkFactory.ChunkCreationResult chunkCreationResult = chunkFactory.createChunk(x, y);
+                final ChunkFactory.ChunkCreationResult chunkCreationResult = chunkFactory.createChunk(x, y,null);
                 // No idea how this could be null, but that has been observed in the world. TODO: find out why and fix
                 //  the underlying cause
                 if (chunkCreationResult != null) {

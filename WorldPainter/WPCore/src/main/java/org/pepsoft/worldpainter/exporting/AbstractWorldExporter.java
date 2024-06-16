@@ -1,11 +1,9 @@
 package org.pepsoft.worldpainter.exporting;
 
+import org.jetbrains.annotations.NotNull;
 import org.pepsoft.minecraft.*;
-import org.pepsoft.util.Box;
-import org.pepsoft.util.ParallelProgressManager;
-import org.pepsoft.util.ProgressReceiver;
+import org.pepsoft.util.*;
 import org.pepsoft.util.ProgressReceiver.OperationCancelled;
-import org.pepsoft.util.SubProgressReceiver;
 import org.pepsoft.util.mdc.MDCCapturingRuntimeException;
 import org.pepsoft.util.mdc.MDCThreadPoolExecutor;
 import org.pepsoft.util.undo.UndoManager;
@@ -15,6 +13,7 @@ import org.pepsoft.worldpainter.*;
 import org.pepsoft.worldpainter.gardenofeden.GardenExporter;
 import org.pepsoft.worldpainter.gardenofeden.Seed;
 import org.pepsoft.worldpainter.layers.*;
+import org.pepsoft.worldpainter.layers.exporters.ResourcesExporter;
 import org.pepsoft.worldpainter.layers.pockets.UndergroundPocketsLayer;
 import org.pepsoft.worldpainter.layers.tunnel.TunnelLayer;
 import org.pepsoft.worldpainter.platforms.JavaExportSettings;
@@ -40,6 +39,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static java.lang.Thread.currentThread;
 import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toMap;
 import static org.pepsoft.minecraft.ChunkFactory.Stats.*;
@@ -230,14 +230,20 @@ public abstract class AbstractWorldExporter implements WorldExporter {
             final RuntimeException[] exception = new RuntimeException[1];
             final ParallelProgressManager parallelProgressManager = (progressReceiver != null) ? new ParallelProgressManager(progressReceiver, regions.size()) : null;
             final AtomicBoolean abort = new AtomicBoolean();
+            final NoiseHardwareAccelerator noiseHardwareAccelerator = NoiseHardwareAccelerator.getInstance();
+            NoiseHardwareAccelerator.getInstance();
+            //NoiseHardwareAccelerator.getRegionNoiseData(0,0);
             try {
                 // Export each individual region
                 for (Point region: sortedRegions) {
+                    final ExecutorService gpuExecutor = createGPUExecutorService("calculating", 1);
                     final Point regionCoords = region;
                     executor.execute(() -> {
                         if (abort.get()) {
                             return;
                         }
+
+                        final long threadId = Thread.currentThread().getId();
                         ProgressReceiver progressReceiver1 = (parallelProgressManager != null) ? parallelProgressManager.createProgressReceiver() : null;
                         if (progressReceiver1 != null) {
                             try {
@@ -254,10 +260,41 @@ public abstract class AbstractWorldExporter implements WorldExporter {
                             final WorldPainterChunkFactory chunkFactory = new WorldPainterChunkFactory(combined, exporters, platform, maxHeight);
                             final WorldPainterChunkFactory ceilingChunkFactory = (ceiling != null) ? new WorldPainterChunkFactory(ceiling, ceilingExporters, platform, maxHeight) : null;
 
+
+
+                            if (NoiseHardwareAccelerator.isGPUEnabled) {
+                                for (Layer layer : exporters.keySet()) {
+                                    if (layer.toString().equals("Resources")) {
+                                        final ResourcesExporter resourcesExporter= (ResourcesExporter) exporters.get(layer);
+                                        if (noiseHardwareAccelerator.allocateSpot(regionCoords,resourcesExporter)) {
+                                        for (int i =0; i<resourcesExporter.activeMaterials.length; i++) {
+                                            if (resourcesExporter.activeMaterials[i].isNamedOneOf(MC_DIRT, MC_GRAVEL)) {
+                                                continue;
+                                            }
+                                            final int index = i;
+
+                                                if (index==0) System.out.println("GPU Created!!!");
+                                            gpuExecutor.execute(() ->{
+
+                                                    noiseHardwareAccelerator.addCalculatedNoiseForRegion(regionCoords, index,threadId);
+                                            });
+                                        }
+
+                                        }
+                                        gpuExecutor.shutdown();
+                                        gpuExecutor.awaitTermination(365,TimeUnit.DAYS);
+                                    }
+                                }
+
+                            }
+
                             WorldRegion worldRegion = new WorldRegion(regionCoords.x, regionCoords.y, minHeight, maxHeight, platform);
                             ExportResults exportResults = null;
                             try {
                                 exportResults = exportRegion(worldRegion, combined, ceiling, regionCoords, tilesSelected, exporters, ceilingExporters, chunkFactory, ceilingChunkFactory, (progressReceiver1 != null) ? new SubProgressReceiver(progressReceiver1, 0.0f, 0.9f) : null);
+                               noiseHardwareAccelerator.freeSpot(regionCoords,threadId);
+
+
                                 if (logger.isDebugEnabled()) {
                                     logger.debug("Generated region " + regionCoords.x + "," + regionCoords.y);
                                 }
@@ -271,6 +308,8 @@ public abstract class AbstractWorldExporter implements WorldExporter {
                                     }
                                 }
                             } finally {
+                                noiseHardwareAccelerator.freeSpot(regionCoords,threadId);
+
                                 if ((exportResults != null) && exportResults.chunksGenerated) {
                                     long saveStart = System.nanoTime();
                                     worldRegion.save(worldDir, dim);
@@ -290,7 +329,7 @@ public abstract class AbstractWorldExporter implements WorldExporter {
                             performFixupsIfNecessary(worldDir, combined, regions, fixups, exportedRegions, collectedStats, progressReceiver1);
                         } catch (Throwable t) {
                             if (chainContains(t, OperationCancelled.class)) {
-                                logger.debug("Operation cancelled on thread {} (message: \"{}\")", Thread.currentThread().getName(), t.getMessage());
+                                logger.debug("Operation cancelled on thread {} (message: \"{}\")", currentThread().getName(), t.getMessage());
                             } else {
                                 logger.error(t.getClass().getSimpleName() + " while exporting region {},{} (message: \"{}\")", region.x, region.y, t.getMessage(), t);
                             }
@@ -531,7 +570,7 @@ public abstract class AbstractWorldExporter implements WorldExporter {
         final int ceilingDelta = dimension.getMaxHeight() - dimension.getCeilingHeight();
         for (int chunkX = lowestChunkX; chunkX <= highestChunkX; chunkX++) {
             for (int chunkY = lowestChunkY; chunkY <= highestChunkY; chunkY++) {
-                final ChunkFactory.ChunkCreationResult chunkCreationResult = createChunk(dimension, chunkFactory, tiles, chunkX, chunkY, tileSelection, exporters, ceiling);
+                final ChunkFactory.ChunkCreationResult chunkCreationResult = createChunk(dimension, chunkFactory, tiles, chunkX, chunkY, tileSelection, exporters, ceiling, regionCoords);
                 if (chunkCreationResult != null) {
                     if ((chunkX >= lowestRegionChunkX) && (chunkX <= highestRegionChunkX) && (chunkY >= lowestRegionChunkY) && (chunkY <= highestRegionChunkY)) {
                         exportResults.chunksGenerated = true;
@@ -844,7 +883,7 @@ public abstract class AbstractWorldExporter implements WorldExporter {
         }, "region.coords", regionCoords);
     }
 
-    protected ChunkFactory.ChunkCreationResult createChunk(Dimension dimension, ChunkFactory chunkFactory, Map<Point, Tile> tiles, int chunkX, int chunkY, boolean tileSelection, Map<Layer, LayerExporter> exporters, boolean ceiling) {
+    protected ChunkFactory.ChunkCreationResult createChunk(Dimension dimension, ChunkFactory chunkFactory, Map<Point, Tile> tiles, int chunkX, int chunkY, boolean tileSelection, Map<Layer, LayerExporter> exporters, boolean ceiling, Point regionCoords) {
         final int tileX = chunkX >> 3;
         final int tileY = chunkY >> 3;
         final Point tileCoords = new Point(tileX, tileY);
@@ -854,14 +893,14 @@ public abstract class AbstractWorldExporter implements WorldExporter {
         if (tileSelection) {
             // Tile selection. Don't export bedrock wall or border tiles
             if (tiles.containsKey(tileCoords)) {
-                return chunkFactory.createChunk(chunkX, chunkY);
+                return chunkFactory.createChunk(chunkX, chunkY,regionCoords);
             } else {
                 return null;
             }
         } else {
             final Tile tile = dimension.getTile(tileCoords);
             if (tile != null) {
-                final ChunkFactory.ChunkCreationResult result = chunkFactory.createChunk(chunkX, chunkY);
+                final ChunkFactory.ChunkCreationResult result = chunkFactory.createChunk(chunkX, chunkY, regionCoords);
                 // If the chunk is marked as NotPresent we might want to render a border chunk here
                 if ((result == null) && border && tile.getBitLayerValue(NotPresent.INSTANCE, (chunkX & 0x7) << 4, (chunkY & 0x7) << 4)) {
                     return BorderChunkFactory.create(chunkX, chunkY, dimension, platform, exporters);
@@ -1022,6 +1061,20 @@ public abstract class AbstractWorldExporter implements WorldExporter {
             public synchronized Thread newThread(Runnable r) {
                 Thread thread = new Thread(threadGroup, r, operation.toLowerCase().replaceAll("\\s+", "-") + "-" + nextID++);
                 thread.setPriority(Thread.MIN_PRIORITY);
+                return thread;
+            }
+
+            private final ThreadGroup threadGroup = new ThreadGroup(operation);
+            private int nextID = 1;
+        });
+    }
+
+    protected ExecutorService createGPUExecutorService(String operation, int jobCount){
+        return MDCThreadPoolExecutor.newFixedThreadPool(jobCount, new ThreadFactory() {
+            @Override
+            public synchronized Thread newThread(@NotNull Runnable r) {
+                Thread thread = new Thread((threadGroup), r, operation.toLowerCase().replaceAll("\\s+", "-") + "-" + nextID++);
+                thread.setPriority(Thread.MAX_PRIORITY);
                 return thread;
             }
 

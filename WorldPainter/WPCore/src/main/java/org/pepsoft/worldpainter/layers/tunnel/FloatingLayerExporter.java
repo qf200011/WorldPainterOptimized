@@ -46,7 +46,7 @@ public class FloatingLayerExporter extends AbstractTunnelLayerExporter implement
     // FirstPassLayerExporter
 
     @Override
-    public void render(Tile surfaceTile, Chunk chunk) {
+    public void render(Tile surfaceTile, Chunk chunk, Point regionCoords) {
         final Tile floatingTile = floorDimension.getTile(surfaceTile.getX(), surfaceTile.getY());
         final FirstPassLayerExporter[] exporters = getFirstPassExportersForTile(floatingTile);
         final int xOffset = (chunk.getxPos() & 7) << 4;
@@ -115,7 +115,7 @@ public class FloatingLayerExporter extends AbstractTunnelLayerExporter implement
 
                 // Apply first pass layers
                 for (FirstPassLayerExporter exporter: exporters) {
-                    exporter.render(floatingTile, chunk);
+                    exporter.render(floatingTile, chunk, null);
                 }
 
                 // TODO add 3D biome support

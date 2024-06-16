@@ -8,6 +8,7 @@ package org.pepsoft.minecraft;
 import org.pepsoft.worldpainter.gardenofeden.Garden;
 import org.pepsoft.worldpainter.layers.Layer;
 
+import java.awt.*;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -29,7 +30,7 @@ public interface ChunkFactory {
      *     statistics about it, or {@code null} if no chunk is present at
      *     the specified coordinates.
      */
-    ChunkCreationResult createChunk(int x, int z);
+    ChunkCreationResult createChunk(int x, int z, Point regionCoords);
 
     /**
      * Get the depth of the chunks this factory will create.

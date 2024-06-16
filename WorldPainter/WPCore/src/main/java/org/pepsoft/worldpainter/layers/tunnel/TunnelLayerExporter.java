@@ -248,7 +248,7 @@ public class TunnelLayerExporter extends AbstractTunnelLayerExporter implements 
                 if (! firstPassExporters.isEmpty()) {
                     final Chunk chunk = chunkSupplier.get();
                     for (FirstPassLayerExporter exporter: firstPassExporters) {
-                        exporter.render(floorTile, chunk);
+                        exporter.render(floorTile, chunk, null);
                     }
                 }
                 return true;

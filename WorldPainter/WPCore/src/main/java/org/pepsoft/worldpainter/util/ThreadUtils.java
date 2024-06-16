@@ -1,6 +1,7 @@
 package org.pepsoft.worldpainter.util;
 
 import org.pepsoft.worldpainter.Configuration;
+import org.pepsoft.worldpainter.exporting.NoiseHardwareAccelerator;
 import org.slf4j.Logger;
 
 import static org.slf4j.LoggerFactory.getLogger;
@@ -44,7 +45,8 @@ public final class ThreadUtils {
             logger.info("Using " + threadCount + " thread(s) for " + operation + " (max. thread count source: logical processors: " + runtime.availableProcessors() + ", available memory: " + (maxMemoryAvailable / 1048576L) + " MB)");
         }
         mostRecentThreadCount = threadCount;
-        return threadCount;
+        int gpuThreads= NoiseHardwareAccelerator.gpuThreads;
+        return threadCount;//+gpuThreads;
     }
 
     /**
