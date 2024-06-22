@@ -158,6 +158,10 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
                                              byte regionNoiseByteAtIndex=regionNoise[i].get(byteIndex);
                                              boolean shouldSetMaterial=((regionNoiseByteAtIndex >> bitIndex) & 1)==1;
 
+                                             boolean shouldSetMaterialOldMethod = noiseGenerators[i].getPerlinNoise(dirtX, dirtY, dirtZ) >= chance;
+
+                                             noiseHardwareAccelerator.addCounter(shouldSetMaterialOldMethod);
+
                                              if (shouldSetMaterial){
                                                  final Material existingMaterial = chunk.getMaterial(x, y, z);
                                                  if (existingMaterial.isNamed(MC_DEEPSLATE) && ORE_TO_DEEPSLATE_VARIANT.containsKey(activeMaterials[i].name)) {

@@ -184,7 +184,7 @@ public final class NoiseHardwareAccelerator {
                materialChances[i] = PerlinNoise.getLevelForPromillage(Math.min(resourceSettings.getChance(resourcesExporter.activeMaterials[materialIndex]) * i / 8f, 1000f));
        }
 
-        ByteBuffer output = ByteBuffer.allocateDirect(680*680*(materialMaxHeight-materialMinHeight)); //one bit for each block to determine if it should or shouldn't place a block of a material type.
+        ByteBuffer output = ByteBuffer.allocateDirect(512*512*(materialMaxHeight-materialMinHeight)); //one bit for each block to determine if it should or shouldn't place a block of a material type.
 
         return new NoiseHardwareAcceleratorRequest(materialSeed,regionCoords.x,regionCoords.y,materialMinHeight, materialMaxHeight,xRegionArrayPointer,yRegionArrayPointer,zRegionArrayPointer,pArrayPointer,outputArrayPointer,output,materialChances);
     }
@@ -198,7 +198,7 @@ public final class NoiseHardwareAccelerator {
 
     public final static boolean isGPUEnabled =true;
 
-    public final  static int gpuThreads =8;
+    public final  static int gpuThreads =4;
 
     public native static NoiseHardwareAcceleratorResponse getRegionNoiseData(NoiseHardwareAcceleratorRequest request);
 
@@ -220,6 +220,20 @@ public final class NoiseHardwareAccelerator {
         this.regionExporters.remove(regionCoords);
 
         this.availableGPUMemoryController.freeMemoryIndex(threadId);
+    }
+
+    private int hitCounter = 0;
+    private int missCounter = 0;
+
+    public synchronized void addCounter(boolean hit){
+        if (hit){
+            hitCounter++;
+        }else{
+            missCounter++;
+        }
+        if ((hitCounter+missCounter)%10000000==0){
+            System.out.println("Hit "+hitCounter+" times out of "+missCounter+hitCounter+" for a utilization rate of "+((float)hitCounter/(hitCounter+missCounter)));
+        }
     }
 
     public void addCalculatedNoiseForRegion(Point regionCoords, int materialIndex, long threadId){

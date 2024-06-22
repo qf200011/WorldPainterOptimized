@@ -16,12 +16,12 @@
 #define TILE_SIZE 128
 #define REGION_SIZE 512
 #define CHUNK_SIZE 16
-#define TILES_PER_REGION_AXIS 5
+#define TILES_PER_REGION_AXIS 4
 #define CHUNKS_PER_TILE_AXIS 8
 #define MAX_HEIGHT 128
 #define MIN_HEIGHT -64
-#define X_ARRAY_SIZE 680
-#define Y_ARRAY_SIZE 680
+#define X_ARRAY_SIZE 512
+#define Y_ARRAY_SIZE 512
 
 cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* regionArrayY, float* regionArrayZ, byte* output, int totalHeight, long long& dev_regionArrayXPtr, long long& dev_regionArrayYPtr, long long& dev_regionArrayZPtr, long long& dev_pPtr, long long& dev_outputPtr);
 void getRegionArray(float* regionArrayX, float* regionArrayY, float* regionArrayZ, int minHeight, int maxHeight, int regionX, int regionY);
@@ -267,7 +267,7 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
 
     std::clock_t c_end = std::clock();
     double time_elapsed_ms = 1000.0 * (c_end - c_start) / CLOCKS_PER_SEC;
-    printf("Clocktime for inputs: %lf\n", time_elapsed_ms);
+    //printf("Clocktime for inputs: %lf\n", time_elapsed_ms);
 
     // Launch a kernel on the GPU with one thread for each element.
     cudaStream_t stream;
@@ -284,7 +284,7 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
 
     c_end = std::clock();
     time_elapsed_ms = 1000.0 * (c_end - c_start) / CLOCKS_PER_SEC;
-    printf("Clocktime for computation before sleep: %lf\n", time_elapsed_ms);
+    //printf("Clocktime for computation before sleep: %lf\n", time_elapsed_ms);
     
     // cudaDeviceSynchronize waits for the kernel to finish, and returns
     // any errors encountered during the launch.
@@ -295,7 +295,7 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
 
     c_end = std::clock();
     time_elapsed_ms = 1000.0 * (c_end - c_start) / CLOCKS_PER_SEC;
-    printf("Clocktime for computation before synchronize: %lf\n", time_elapsed_ms);
+    //printf("Clocktime for computation before synchronize: %lf\n", time_elapsed_ms);
 
 
     cudaStatus = cudaDeviceSynchronize();
@@ -306,7 +306,7 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
 
     c_end = std::clock();
     time_elapsed_ms = 1000.0 * (c_end - c_start) / CLOCKS_PER_SEC;
-    printf("Clocktime for computation after synchronize: %lf\n", time_elapsed_ms);
+    //printf("Clocktime for computation after synchronize: %lf\n", time_elapsed_ms);
 
     //save pointers for reuse
     dev_pPtr = (long long)dev_p;
@@ -328,7 +328,7 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
 
     c_end = std::clock();
     time_elapsed_ms = 1000.0 * (c_end - c_start) / CLOCKS_PER_SEC;
-    printf("Clocktime for after copying results: %lf\n", time_elapsed_ms);
+    //printf("Clocktime for after copying results: %lf\n", time_elapsed_ms);
 
 Error:
     /*cudaFree(dev_p);
@@ -437,8 +437,8 @@ void getDataFromRequest(JNIEnv* env, jobject request, jlong& materialSeed, jint&
     regionZPtr = env->CallLongMethod(request, getRegionZPtrMethod);
     pPtr = env->CallLongMethod(request, getpPtrMethod);
     outputPtr = env->CallLongMethod(request, getOutputPtrMethod);
-    jobject outputArrayBuffer =  env->CallObjectMethod(request, getOutputArrayMethod);
-    outputArray = (byte*) env->GetDirectBufferAddress(outputArrayBuffer);
+    jobject outputArrayBuffer = env->CallObjectMethod(request, getOutputArrayMethod);
+    outputArray = (byte*)env->GetDirectBufferAddress(outputArrayBuffer);
     jfloatArray chancesArray = (jfloatArray)env->CallObjectMethod(request, getChancesMethod);
     chances = env->GetFloatArrayElements(chancesArray, 0);
 }
@@ -449,18 +449,18 @@ jobject createResponse(JNIEnv* env, long long dev_regionXPtr, long long dev_regi
 
     jmethodID constructorMethod = env->GetMethodID(noiseHardwareAcceleratorResponseClass, "<init>", "([FJJJJJ)V");
 
-    jlong pPtr= (jlong) dev_pPtr;
-    jlong regionXPtr= (jlong) dev_regionXPtr;
-    jlong regionYPtr = (jlong) dev_regionYPtr;
-    jlong regionZPtr = (jlong) dev_regionZPtr;
-    jlong outputPtr = (jlong) dev_outputPtr;
+    jlong pPtr = (jlong)dev_pPtr;
+    jlong regionXPtr = (jlong)dev_regionXPtr;
+    jlong regionYPtr = (jlong)dev_regionYPtr;
+    jlong regionZPtr = (jlong)dev_regionZPtr;
+    jlong outputPtr = (jlong)dev_outputPtr;
 
     jobject response = env->NewObject(noiseHardwareAcceleratorResponseClass, constructorMethod, NULL, regionXPtr, regionYPtr, regionZPtr, pPtr, outputPtr);
 
     return response;
 }
 
-JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_NoiseHardwareAccelerator_getRegionNoiseData (JNIEnv* env, jclass , jobject request) {
+JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_NoiseHardwareAccelerator_getRegionNoiseData(JNIEnv* env, jclass, jobject request) {
     auto t_start = std::chrono::high_resolution_clock::now();
     std::clock_t c_start = std::clock();
 
@@ -484,20 +484,31 @@ JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_NoiseHardwareA
 
     float regionArrayX[X_ARRAY_SIZE]; //dx
     float regionArrayY[Y_ARRAY_SIZE]; //dy
-    float*  regionArrayZ; //dz but shifted
+    float* regionArrayZ; //dz but shifted
     int p[512];
     //[TILE_SIZE * TILES_PER_REGION_AXIS] [TILE_SIZE * TILES_PER_REGION_AXIS] [totalHeight]
     regionArrayZ = new float[totalHeight];
-    getRegionArray(regionArrayX, regionArrayY, regionArrayZ, materialMaxHeight,materialMinHeight, regionX, regionY);
+    getRegionArray(regionArrayX, regionArrayY, regionArrayZ, materialMaxHeight, materialMinHeight, regionX, regionY);
 
-    
-    getPArray(p,env,materialSeed);
+
+    getPArray(p, env, materialSeed);
     //double test = getPerlinNoiseAt(regionArrayX[128], regionArrayY[128], regionArrayZ[60 + 64],p);
-    
+
 
     // Add vectors in parallel.
 
-    cudaError_t cudaStatus = noiseWithCuda(p,chances, regionArrayX, regionArrayY, regionArrayZ, outputArray,totalHeight,dev_regionXPtr, dev_regionYPtr, dev_regionZPtr, dev_pPtr, dev_outputPtr);
+    cudaError_t cudaStatus = noiseWithCuda(p, chances, regionArrayX, regionArrayY, regionArrayZ, outputArray, totalHeight, dev_regionXPtr, dev_regionYPtr, dev_regionZPtr, dev_pPtr, dev_outputPtr);
+
+    int size = X_ARRAY_SIZE * Y_ARRAY_SIZE * totalHeight * 8;
+    int counter = 0;
+    for (int i = 0; i < size; i++) {
+        int byteIndex = i / 8;
+        int bitIndex = i & 8;
+        if ((outputArray[byteIndex] >> bitIndex) & 1){
+            counter++;
+        }
+    }
+
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "addWithCuda failed!");
         delete[] regionArrayZ;

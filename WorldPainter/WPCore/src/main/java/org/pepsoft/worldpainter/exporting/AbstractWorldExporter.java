@@ -263,6 +263,7 @@ public abstract class AbstractWorldExporter implements WorldExporter {
                             final WorldPainterChunkFactory ceilingChunkFactory = (ceiling != null) ? new WorldPainterChunkFactory(ceiling, ceilingExporters, platform, maxHeight) : null;
 
 
+                            Instant startTime = Instant.now();
                             if (NoiseHardwareAccelerator.isGPUEnabled) {
                                 for (Layer layer : exporters.keySet()) {
                                     if (layer.toString().equals("Resources")) {
@@ -276,18 +277,20 @@ public abstract class AbstractWorldExporter implements WorldExporter {
 
                                                 if (index==0) System.out.println("GPU Created!!!");
                                             gpuExecutor.execute(() ->{
-                                                Instant startTime = Instant.now();
+
                                                     noiseHardwareAccelerator.addCalculatedNoiseForRegion(regionCoords, index,threadId);
-                                                Instant endTime = Instant.now();
-                                                long timeElapsed = Duration.between(startTime,endTime).toMillis();
-                                                System.out.println();
-                                                System.out.println(timeElapsed);
+
                                             });
                                         }
 
                                         }
                                         gpuExecutor.shutdown();
                                         gpuExecutor.awaitTermination(365,TimeUnit.DAYS);
+
+                                        Instant endTime = Instant.now();
+                                        long timeElapsed = Duration.between(startTime,endTime).toMillis();
+                                        System.out.println();
+                                        System.out.println(timeElapsed);
                                     }
                                 }
 
