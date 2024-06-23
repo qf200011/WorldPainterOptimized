@@ -24,7 +24,7 @@
 #define MIN_HEIGHT -64
 #define X_ARRAY_SIZE 512
 #define Y_ARRAY_SIZE 512
-#define DEBUGGING true
+#define DEBUGGING false
 
 cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* regionArrayY, float* regionArrayZ, bool* output, int& outputSize, int totalHeight, long long& dev_regionArrayXPtr, long long& dev_regionArrayYPtr, long long& dev_regionArrayZPtr, long long& dev_pPtr, long long& dev_outputPtr, long long& dev_compactedOutputPtr);
 void getRegionArray(float* regionArrayX, float* regionArrayY, float* regionArrayZ, int minHeight, int maxHeight, int regionX, int regionY);

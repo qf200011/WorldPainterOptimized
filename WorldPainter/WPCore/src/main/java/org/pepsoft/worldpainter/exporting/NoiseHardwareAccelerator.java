@@ -1,11 +1,9 @@
 package org.pepsoft.worldpainter.exporting;
 
-import org.pepsoft.minecraft.Material;
 import org.pepsoft.util.PerlinNoise;
 import org.pepsoft.worldpainter.layers.exporters.ResourcesExporter;
 
 import java.awt.*;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 
@@ -33,9 +31,9 @@ public final class NoiseHardwareAccelerator {
         private ArrayList<Boolean> isMemoryAvailableList;
 
         //array of size of number of gpu threads that contains an array of pointers to GPU memory. One for each material.
-        private ArrayList<ArrayList<Long>> xRegionMaterialGPUPointerArray;
-        private ArrayList<ArrayList<Long>> yRegionMaterialGPUPointerArray;
-        private ArrayList<ArrayList<Long>> zRegionMaterialGPUPointerArray;
+        private ArrayList<ArrayList<Long>> xRegionGPUPointerArray;
+        private ArrayList<ArrayList<Long>> yRegionGPUPointerArray;
+        private ArrayList<ArrayList<Long>> zRegionGPUPointerArray;
         private ArrayList<ArrayList<Long>> pGPUPointerArray;
         private ArrayList<ArrayList<Long>> outputGPUPointerArray;
         private ArrayList<ArrayList<Long>> compactedGPUPointerArray;
@@ -48,9 +46,9 @@ public final class NoiseHardwareAccelerator {
             isMemoryAvailableArray=new ArrayList<>(gpuThreads);
             threadIdToMemoryIndexMap=new HashMap<>();
 
-            xRegionMaterialGPUPointerArray= new ArrayList<>(gpuThreads);
-            yRegionMaterialGPUPointerArray= new ArrayList<>(gpuThreads);
-            zRegionMaterialGPUPointerArray= new ArrayList<>(gpuThreads);
+            xRegionGPUPointerArray = new ArrayList<>(gpuThreads);
+            yRegionGPUPointerArray = new ArrayList<>(gpuThreads);
+            zRegionGPUPointerArray = new ArrayList<>(gpuThreads);
             pGPUPointerArray =new ArrayList<>(gpuThreads);
             outputGPUPointerArray =new ArrayList<>(gpuThreads);
             compactedGPUPointerArray =new ArrayList<>(gpuThreads);
@@ -58,9 +56,9 @@ public final class NoiseHardwareAccelerator {
             for (int i=0;i<gpuThreads;i++){
                 isMemoryAvailableArray.add(true);
 
-                xRegionMaterialGPUPointerArray.add(new ArrayList<>());
-                yRegionMaterialGPUPointerArray.add(new ArrayList<>());
-                zRegionMaterialGPUPointerArray.add(new ArrayList<>());
+                xRegionGPUPointerArray.add(new ArrayList<>());
+                yRegionGPUPointerArray.add(new ArrayList<>());
+                zRegionGPUPointerArray.add(new ArrayList<>());
                 pGPUPointerArray.add(new ArrayList<>());
                 outputGPUPointerArray.add(new ArrayList<>());
                 compactedGPUPointerArray.add(new ArrayList<>());
@@ -70,21 +68,21 @@ public final class NoiseHardwareAccelerator {
         }
 
         public long getXGPUMemoryPointer(long threadId, int materialIndex){
-            int index=getMemoryIndex(threadId,this.xRegionMaterialGPUPointerArray);
+            int index=getMemoryIndex(threadId,this.xRegionGPUPointerArray);
 
-            return this.xRegionMaterialGPUPointerArray.get(index).get(materialIndex);
+            return this.xRegionGPUPointerArray.get(index).get(materialIndex);
         }
 
         public long getYGPUMemoryPointer(long threadId, int materialIndex){
-            int index=getMemoryIndex(threadId,this.yRegionMaterialGPUPointerArray);
+            int index=getMemoryIndex(threadId,this.yRegionGPUPointerArray);
 
-            return yRegionMaterialGPUPointerArray.get(index).get(materialIndex);
+            return yRegionGPUPointerArray.get(index).get(materialIndex);
         }
 
         public long getZGPUMemoryPointer(long threadId, int materialIndex){
-            int index=getMemoryIndex(threadId,this.zRegionMaterialGPUPointerArray);
+            int index=getMemoryIndex(threadId,this.zRegionGPUPointerArray);
 
-            return this.zRegionMaterialGPUPointerArray.get(index).get(materialIndex);
+            return this.zRegionGPUPointerArray.get(index).get(materialIndex);
         }
 
         public long getPGPUMemoryPointer(long threadId, int materialIndex){
@@ -108,30 +106,47 @@ public final class NoiseHardwareAccelerator {
         private synchronized int getMemoryIndex(long threadId, ArrayList<ArrayList<Long>> gpuPointerArray){
             Integer memoryIndex= this.threadIdToMemoryIndexMap.get(threadId);
 
-            int index = -1;
-            if (memoryIndex!=null){
-                index=memoryIndex;
-            }
-            else {
-                for (int i = 0; i < gpuThreads; i++) {
-                    if (this.isMemoryAvailableArray.get(i)) {
-                        this.threadIdToMemoryIndexMap.put(threadId, i);
-                        this.isMemoryAvailableArray.set(i, false);
-                        index = i;
-                        break;
-                    }
-                }
-            }
-
-            if (gpuPointerArray.get(index).size()!=12) {
+            if (gpuPointerArray.get(memoryIndex).size()!=12) {
                 for (int i = 0; i < 12; i++) { //todo get actual material count
-                    gpuPointerArray.get(index).add(0L);
+                    gpuPointerArray.get(memoryIndex).add(0L);
                 }
             }
 
 
 
-            return index;
+            return memoryIndex;
+        }
+
+        public boolean waitForOpenMemory(long threadId, int retries){
+            int counter=0;
+            while (counter<retries){
+                counter++;
+
+                int index=getOpenIndex(threadId);
+
+                if (index!=-1){
+                    return true;
+                }
+
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            return false;
+        }
+
+        private synchronized int getOpenIndex(long threadId){
+            for (int i=0; i<this.isMemoryAvailableArray.size(); i++){
+                if (this.isMemoryAvailableArray.get(i)) {
+                    this.threadIdToMemoryIndexMap.put(threadId, i);
+                    this.isMemoryAvailableArray.set(i, false);
+                    return i;
+                }
+            }
+            return -1;
         }
 
         public void freeMemoryIndex(long threadId){
@@ -145,9 +160,9 @@ public final class NoiseHardwareAccelerator {
         public void setGPUMemoryPointers(long threadId, int materialIndex,NoiseHardwareAcceleratorResponse response){
             if (this.threadIdToMemoryIndexMap.containsKey(threadId)){
                 int memoryIndex= this.threadIdToMemoryIndexMap.get(threadId);
-                this.xRegionMaterialGPUPointerArray.get(memoryIndex).set(materialIndex, response.getxRegionGPUPointer());
-                this.yRegionMaterialGPUPointerArray.get(memoryIndex).set(materialIndex, response.getyRegionGPUPointer());
-                this.zRegionMaterialGPUPointerArray.get(memoryIndex).set(materialIndex, response.getzRegionGPUPointer());
+                this.xRegionGPUPointerArray.get(memoryIndex).set(materialIndex, response.getxRegionGPUPointer());
+                this.yRegionGPUPointerArray.get(memoryIndex).set(materialIndex, response.getyRegionGPUPointer());
+                this.zRegionGPUPointerArray.get(memoryIndex).set(materialIndex, response.getzRegionGPUPointer());
                 this.pGPUPointerArray.get(memoryIndex).set(materialIndex, response.getpRegionGPUPointer());
                 this.outputGPUPointerArray.get(memoryIndex).set(materialIndex,response.getOutputRegionGPUPointer());
                 this.compactedGPUPointerArray.get(memoryIndex).set(materialIndex,response.getCompactedOutputGPUPointer());
@@ -159,9 +174,9 @@ public final class NoiseHardwareAccelerator {
                     this.threadIdToMemoryIndexMap.put(threadId,memoryIndex);
                     this.isMemoryAvailableArray.set(memoryIndex,false);
 
-                    this.xRegionMaterialGPUPointerArray.get(memoryIndex).set(materialIndex, response.getxRegionGPUPointer());
-                    this.yRegionMaterialGPUPointerArray.get(memoryIndex).set(materialIndex, response.getyRegionGPUPointer());
-                    this.zRegionMaterialGPUPointerArray.get(memoryIndex).set(materialIndex, response.getzRegionGPUPointer());
+                    this.xRegionGPUPointerArray.get(memoryIndex).set(materialIndex, response.getxRegionGPUPointer());
+                    this.yRegionGPUPointerArray.get(memoryIndex).set(materialIndex, response.getyRegionGPUPointer());
+                    this.zRegionGPUPointerArray.get(memoryIndex).set(materialIndex, response.getzRegionGPUPointer());
                     this.pGPUPointerArray.get(memoryIndex).set(materialIndex, response.getpRegionGPUPointer());
                     this.outputGPUPointerArray.get(memoryIndex).set(materialIndex, response.getOutputRegionGPUPointer());
                     this.compactedGPUPointerArray.get(memoryIndex).set(materialIndex, response.getCompactedOutputGPUPointer());
@@ -216,27 +231,31 @@ public final class NoiseHardwareAccelerator {
 
     private HashMap<Point, ResourcesExporter> regionExporters;
 
-    public synchronized  boolean allocateSpot(Point regionCoords, ResourcesExporter resourcesExporter){
-        if (this.regionExporters.size()>=gpuThreads){
+    public boolean allocateSpot(Point regionCoords, long threadId, ResourcesExporter resourcesExporter){
+        if (!this.availableGPUMemoryController.waitForOpenMemory(threadId, 10)){
             return false;
         }
 
-        this.regionExporters.put(regionCoords,resourcesExporter);
+        this.takeReservedSpot(regionCoords,resourcesExporter);
         return true;
     }
 
-    public synchronized  void freeSpot(Point regionCoords, long threadId){
+    private synchronized void takeReservedSpot(Point regionCoords, ResourcesExporter resourcesExporter){
+        this.regionExporters.put(regionCoords,resourcesExporter);
+    }
+
+    public synchronized  void freeSpot(Point regionCoords){
         this.calculatedNoises.remove(regionCoords);
         this.regionExporters.remove(regionCoords);
 
+
+    }
+
+    public synchronized void freeMemory(long threadId){
         this.availableGPUMemoryController.freeMemoryIndex(threadId);
     }
 
     public void addCalculatedNoiseForRegion(Point regionCoords, int materialIndex, long threadId){
-
-        if (this.calculatedNoises.size()>gpuThreads){ //do cpu instead //todo check if gpu memory is full instead
-            return;
-        }
 
         ResourcesExporter resourcesExporter = this.regionExporters.get(regionCoords);
         if (resourcesExporter==null){

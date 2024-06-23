@@ -268,7 +268,7 @@ public abstract class AbstractWorldExporter implements WorldExporter {
                                 for (Layer layer : exporters.keySet()) {
                                     if (layer.toString().equals("Resources")) {
                                         final ResourcesExporter resourcesExporter= (ResourcesExporter) exporters.get(layer);
-                                        if (noiseHardwareAccelerator.allocateSpot(regionCoords,resourcesExporter)) {
+                                        if (noiseHardwareAccelerator.allocateSpot(regionCoords,threadId,resourcesExporter)) {
                                         for (int i =0; i<resourcesExporter.activeMaterials.length; i++) {
                                             if (resourcesExporter.activeMaterials[i].isNamedOneOf(MC_DIRT, MC_GRAVEL)) {
                                                 continue;
@@ -284,9 +284,15 @@ public abstract class AbstractWorldExporter implements WorldExporter {
                                             });
                                         }
 
-                                        }
+
                                         gpuExecutor.shutdown();
                                         gpuExecutor.awaitTermination(365,TimeUnit.DAYS);
+
+                                        noiseHardwareAccelerator.freeMemory(threadId);
+
+                                        }else{
+                                            System.out.println("Sadness");
+                                        }
 
                                         Instant endTime = Instant.now();
                                         long timeElapsed = Duration.between(startTime,endTime).toMillis();
@@ -302,7 +308,7 @@ public abstract class AbstractWorldExporter implements WorldExporter {
                             ExportResults exportResults = null;
                             try {
                                 exportResults = exportRegion(worldRegion, combined, ceiling, regionCoords, tilesSelected, exporters, ceilingExporters, chunkFactory, ceilingChunkFactory, (progressReceiver1 != null) ? new SubProgressReceiver(progressReceiver1, 0.0f, 0.9f) : null);
-                               noiseHardwareAccelerator.freeSpot(regionCoords,threadId);
+                               noiseHardwareAccelerator.freeSpot(regionCoords);
 
 
                                 if (logger.isDebugEnabled()) {
@@ -318,7 +324,7 @@ public abstract class AbstractWorldExporter implements WorldExporter {
                                     }
                                 }
                             } finally {
-                                noiseHardwareAccelerator.freeSpot(regionCoords,threadId);
+                                noiseHardwareAccelerator.freeSpot(regionCoords);
 
                                 if ((exportResults != null) && exportResults.chunksGenerated) {
                                     long saveStart = System.nanoTime();
