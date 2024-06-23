@@ -45,8 +45,7 @@ public final class ThreadUtils {
             logger.info("Using " + threadCount + " thread(s) for " + operation + " (max. thread count source: logical processors: " + runtime.availableProcessors() + ", available memory: " + (maxMemoryAvailable / 1048576L) + " MB)");
         }
         mostRecentThreadCount = threadCount;
-        int gpuThreads= NoiseHardwareAccelerator.gpuThreads;
-        return threadCount;//+gpuThreads;
+        return threadCount;
     }
 
     /**

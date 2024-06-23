@@ -322,6 +322,8 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
     dev_outputPtr = (long long)dev_output;
     dev_compactedOutputPtr = (long long)dev_CompactedOutput;
 
+    cudaFree(dev_chances);
+
     c_end = std::clock();
     time_elapsed_ms = 1000.0 * (c_end - c_start) / CLOCKS_PER_SEC;
     if (DEBUGGING) printf("Clocktime for after copying results: %lf\n", time_elapsed_ms);

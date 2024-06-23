@@ -263,52 +263,10 @@ public abstract class AbstractWorldExporter implements WorldExporter {
                             final WorldPainterChunkFactory ceilingChunkFactory = (ceiling != null) ? new WorldPainterChunkFactory(ceiling, ceilingExporters, platform, maxHeight) : null;
 
 
-                            Instant startTime = Instant.now();
-                            if (NoiseHardwareAccelerator.isGPUEnabled) {
-                                for (Layer layer : exporters.keySet()) {
-                                    if (layer.toString().equals("Resources")) {
-                                        final ResourcesExporter resourcesExporter= (ResourcesExporter) exporters.get(layer);
-                                        if (noiseHardwareAccelerator.allocateSpot(regionCoords,threadId,resourcesExporter)) {
-                                        for (int i =0; i<resourcesExporter.activeMaterials.length; i++) {
-                                            if (resourcesExporter.activeMaterials[i].isNamedOneOf(MC_DIRT, MC_GRAVEL)) {
-                                                continue;
-                                            }
-                                            final int index = i;
-
-
-                                                /*if (index==0) System.out.println("GPU Created!!!");*/
-                                            gpuExecutor.execute(() ->{
-
-                                                    noiseHardwareAccelerator.addCalculatedNoiseForRegion(regionCoords, index,threadId);
-
-                                            });
-                                        }
-
-
-                                        gpuExecutor.shutdown();
-                                        gpuExecutor.awaitTermination(365,TimeUnit.DAYS);
-
-                                        noiseHardwareAccelerator.freeMemory(threadId);
-
-                                        }else{
-                                            System.out.println("Sadness");
-                                        }
-
-                                        Instant endTime = Instant.now();
-                                        long timeElapsed = Duration.between(startTime,endTime).toMillis();
-                                        /*System.out.println();
-                                        System.out.println(timeElapsed);*/
-                                    }
-                                }
-
-                            }
-
-
                             WorldRegion worldRegion = new WorldRegion(regionCoords.x, regionCoords.y, minHeight, maxHeight, platform);
                             ExportResults exportResults = null;
                             try {
                                 exportResults = exportRegion(worldRegion, combined, ceiling, regionCoords, tilesSelected, exporters, ceilingExporters, chunkFactory, ceilingChunkFactory, (progressReceiver1 != null) ? new SubProgressReceiver(progressReceiver1, 0.0f, 0.9f) : null);
-                               noiseHardwareAccelerator.freeSpot(regionCoords);
 
 
                                 if (logger.isDebugEnabled()) {
@@ -324,7 +282,6 @@ public abstract class AbstractWorldExporter implements WorldExporter {
                                     }
                                 }
                             } finally {
-                                noiseHardwareAccelerator.freeSpot(regionCoords);
 
                                 if ((exportResults != null) && exportResults.chunksGenerated) {
                                     long saveStart = System.nanoTime();

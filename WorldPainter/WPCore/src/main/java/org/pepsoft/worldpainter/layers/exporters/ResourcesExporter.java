@@ -16,6 +16,9 @@ import org.pepsoft.worldpainter.Tile;
 import org.pepsoft.worldpainter.exporting.AbstractLayerExporter;
 import org.pepsoft.worldpainter.exporting.FirstPassLayerExporter;
 import org.pepsoft.worldpainter.exporting.NoiseHardwareAccelerator;
+import org.pepsoft.worldpainter.exporting.gpuacceleration.GPUOptimizable;
+import org.pepsoft.worldpainter.exporting.gpuacceleration.NoiseGenerationRequest;
+import org.pepsoft.worldpainter.exporting.gpuacceleration.ResourceNoiseGenerationRequest;
 import org.pepsoft.worldpainter.layers.Resources;
 import org.pepsoft.worldpainter.layers.Void;
 
@@ -23,11 +26,11 @@ import java.awt.*;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.Serializable;
-import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.List;
 
 import static java.lang.Math.abs;
+import static java.lang.Math.min;
 import static org.pepsoft.minecraft.Constants.*;
 import static org.pepsoft.minecraft.Material.*;
 import static org.pepsoft.util.MathUtils.clamp;
@@ -40,7 +43,7 @@ import static org.pepsoft.worldpainter.layers.exporters.ResourcesExporter.Resour
  *
  * @author pepijn
  */
-public class ResourcesExporter extends AbstractLayerExporter<Resources> implements FirstPassLayerExporter {
+public class ResourcesExporter extends AbstractLayerExporter<Resources> implements FirstPassLayerExporter, GPUOptimizable {
     public ResourcesExporter(Dimension dimension, Platform platform, ExporterSettings settings) {
         super(dimension, platform, (settings != null) ? settings : defaultSettings(platform, dimension.getAnchor(), dimension.getMinHeight(), dimension.getMaxHeight()), Resources.INSTANCE);
         final ResourcesExporterSettings resourcesSettings = (ResourcesExporterSettings) super.settings;
@@ -51,6 +54,7 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
                 activeMaterials.add(material);
             }
         }
+        this.threadAndProcessToNoiseIndexesMap = new HashMap<>();
         this.activeMaterials = activeMaterials.toArray(new Material[activeMaterials.size()]);
         noiseGenerators = new PerlinNoise[this.activeMaterials.length];
         final long[] seedOffsets = new long[this.activeMaterials.length];
@@ -81,8 +85,8 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
         final boolean coverSteepTerrain = dimension.isCoverSteepTerrain(), nether = (dimension.getAnchor().dim == DIM_NETHER);
 
         boolean hasGPUNoise=false;
-        if (NoiseHardwareAccelerator.isGPUEnabled&&regionCoords!=null&&noiseHardwareAccelerator.calculatedNoises.containsKey(regionCoords)){
-             render(noiseHardwareAccelerator.calculatedNoises.get(regionCoords),chunk,nether);
+        if (NoiseHardwareAccelerator.isGPUEnabled&&regionCoords!=null&&threadAndProcessToNoiseIndexesMap.containsKey(Thread.currentThread().getId())){
+             render((HashMap<Integer, int[]>) threadAndProcessToNoiseIndexesMap.get(Thread.currentThread().getId()),chunk,nether);
              return;
         }
 
@@ -225,6 +229,7 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
     public final PerlinNoise[] noiseGenerators;
     public final int[] minLevels, maxLevels;
     private final float[][] chances;
+    private final Map<Long,Map<Integer,int[]>> threadAndProcessToNoiseIndexesMap;
 
     private static final Map<String, Material> ORE_TO_DEEPSLATE_VARIANT = ImmutableMap.of(
             MC_COAL_ORE, DEEPSLATE_COAL_ORE,
@@ -236,6 +241,43 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
             MC_DIAMOND_ORE, DEEPSLATE_DIAMOND_ORE,
             MC_EMERALD_ORE, DEEPSLATE_EMERALD_ORE
     );
+
+    private String getUniqueKeyForNoiseMap(long threadId, int processId){
+        return threadId+"-"+processId;
+    }
+
+    @Override
+    public void computePerlinNoiseOnGPU(Point region) {
+        for (int materialIndex=0;materialIndex<activeMaterials.length; materialIndex++){
+            final float blobSize;
+            if (activeMaterials[materialIndex].isNamedOneOf(MC_DIRT, MC_GRAVEL)){
+                blobSize=SMALL_BLOBS;
+            } else{
+                blobSize=TINY_BLOBS;
+            }
+
+            final long seed = noiseGenerators[materialIndex].getSeed();
+
+            int minMaterialHeight = minLevels[materialIndex];
+            int maxMaterialHeight = maxLevels[materialIndex];
+            int heightSize = NoiseGenerationRequest.HEIGHT_SIZE;
+
+            for (int startingHeight=minMaterialHeight; startingHeight<=maxMaterialHeight; startingHeight=startingHeight+heightSize) { //todo, including max?
+                ResourceNoiseGenerationRequest resourceNoiseHardwareAcceleratorRequest = new ResourceNoiseGenerationRequest(seed,region.x,region.y,startingHeight,blobSize,this,chances[materialIndex]);
+                long threadId=Thread.currentThread().getId();
+                NoiseHardwareAccelerator.getInstance().addGPURequestToQueue(threadId,materialIndex,resourceNoiseHardwareAcceleratorRequest); //use materialIndex since it's unique per thread.
+            }
+        }
+    }
+
+    @Override
+    public synchronized void computeCallBack(long threadId, int processId, int[] outputIndexes) {
+        if (!threadAndProcessToNoiseIndexesMap.containsKey(threadId)){
+            threadAndProcessToNoiseIndexesMap.put(threadId, new HashMap<>());
+        }
+
+        threadAndProcessToNoiseIndexesMap.get(threadId).put(processId,outputIndexes);
+    }
 
     public static class ResourcesExporterSettings implements ExporterSettings {
         private ResourcesExporterSettings(Map<Material, ResourceSettings> settings) {
