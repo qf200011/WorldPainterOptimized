@@ -76,30 +76,24 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
 
     @Override
     public void render(Tile tile, Chunk chunk, Point regionCoords) {
-        final int minimumLevel = ((ResourcesExporterSettings) super.settings).getMinimumLevel();
-        final int xOffset = (chunk.getxPos() & 7) << 4;
-        final int zOffset = (chunk.getzPos() & 7) << 4;
+        NoiseHardwareAccelerator noiseHardwareAccelerator = NoiseHardwareAccelerator.getInstance();
+
         final boolean coverSteepTerrain = dimension.isCoverSteepTerrain(), nether = (dimension.getAnchor().dim == DIM_NETHER);
 
         boolean hasGPUNoise=false;
-
-        ByteBuffer[] regionNoise=new ByteBuffer[activeMaterials.length];
-
-
-
-        NoiseHardwareAccelerator noiseHardwareAccelerator = NoiseHardwareAccelerator.getInstance();
-
-        HashMap<Integer,ByteBuffer> regionNoiseMap=null;
         if (NoiseHardwareAccelerator.isGPUEnabled&&regionCoords!=null&&noiseHardwareAccelerator.calculatedNoises.containsKey(regionCoords)){
-            hasGPUNoise=true;
-            regionNoiseMap=(HashMap<Integer,ByteBuffer>) noiseHardwareAccelerator.calculatedNoises.get(regionCoords);
+             render(noiseHardwareAccelerator.calculatedNoises.get(regionCoords),chunk,nether);
+             return;
         }
 
-        if (regionNoiseMap!=null){
-            for (int i=0; i< activeMaterials.length; i++){
-                regionNoise[i]=regionNoiseMap.get(i);
-            }
-        }
+
+        final int minimumLevel = ((ResourcesExporterSettings) super.settings).getMinimumLevel();
+        final int xOffset = (chunk.getxPos() & 7) << 4;
+        final int zOffset = (chunk.getzPos() & 7) << 4;
+
+
+
+
 
 //        int[] counts = new int[256];
         for (int x = 0; x < 16; x++) {
@@ -149,33 +143,7 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
                                  }
 
                                  else{
-                                         if (hasGPUNoise&&regionNoise!=null) {
-                                             noise=0;
-                                             int index=(x) + ((z) * 680) + ((y-minLevels[i]) * 680 * 680);
-                                             int byteIndex=index/8;
-                                             int bitIndex=index%8;
-
-                                             byte regionNoiseByteAtIndex=regionNoise[i].get(byteIndex);
-                                             boolean shouldSetMaterial=((regionNoiseByteAtIndex >> bitIndex) & 1)==1;
-
-                                             boolean shouldSetMaterialOldMethod = noiseGenerators[i].getPerlinNoise(dirtX, dirtY, dirtZ) >= chance;
-
-                                             noiseHardwareAccelerator.addCounter(shouldSetMaterialOldMethod);
-
-                                             if (shouldSetMaterial){
-                                                 final Material existingMaterial = chunk.getMaterial(x, y, z);
-                                                 if (existingMaterial.isNamed(MC_DEEPSLATE) && ORE_TO_DEEPSLATE_VARIANT.containsKey(activeMaterials[i].name)) {
-                                                     chunk.setMaterial(x, y, z, ORE_TO_DEEPSLATE_VARIANT.get(activeMaterials[i].name));
-                                                 } else if (nether && (activeMaterials[i].isNamed(MC_GOLD_ORE))) {
-                                                     chunk.setMaterial(x, y, z, NETHER_GOLD_ORE);
-                                                 } else {
-                                                     chunk.setMaterial(x, y, z, activeMaterials[i]);
-                                                 }
-                                                 break;
-                                             }
-                                         } else {
                                              noise = noiseGenerators[i].getPerlinNoise(dx, dy, dz);
-                                     }
 
                                  }
                                  if (noise < chance){
@@ -209,6 +177,45 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
 //            }
 //        }
 //        System.out.println();
+    }
+
+    private void render(HashMap<Integer,int[]> materialToCoordMap, Chunk chunk, boolean nether){
+        for (int i = 0; i < activeMaterials.length; i++) {
+            if (!materialToCoordMap.containsKey(i)){
+                break;
+            }
+            for (int index:materialToCoordMap.get(i)){
+                int tempIndex=index;
+                int y = index/(512*512)-1-minLevels[i];
+                tempIndex-=y*(512*512);
+                int x=tempIndex%512;
+                int z=tempIndex/512;
+
+                int lowerXBound=chunk.getxPos()*16;
+                int upperXBound=chunk.getxPos()*16+15;
+
+                int lowerZBound=chunk.getzPos()*16;
+                int upperZBound=chunk.getzPos()*16+15;
+
+                if (x<lowerXBound||x>upperXBound){
+                    break;
+                }
+
+                if (z<lowerZBound|| z>upperZBound){
+                    break;
+                }
+
+                final Material existingMaterial = chunk.getMaterial(x, y, z);
+                if (existingMaterial.isNamed(MC_DEEPSLATE) && ORE_TO_DEEPSLATE_VARIANT.containsKey(activeMaterials[i].name)) {
+                    chunk.setMaterial(x, y, z, ORE_TO_DEEPSLATE_VARIANT.get(activeMaterials[i].name));
+                } else if (nether && (activeMaterials[i].isNamed(MC_GOLD_ORE))) {
+                    chunk.setMaterial(x, y, z, NETHER_GOLD_ORE);
+                } else {
+                    chunk.setMaterial(x, y, z, activeMaterials[i]);
+                }
+                break;
+            }
+        }
     }
 
 //  TODO: resource frequenties onderzoeken met Statistics tool!

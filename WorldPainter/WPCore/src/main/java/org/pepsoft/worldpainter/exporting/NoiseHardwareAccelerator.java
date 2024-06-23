@@ -38,6 +38,7 @@ public final class NoiseHardwareAccelerator {
         private ArrayList<ArrayList<Long>> zRegionMaterialGPUPointerArray;
         private ArrayList<ArrayList<Long>> pGPUPointerArray;
         private ArrayList<ArrayList<Long>> outputGPUPointerArray;
+        private ArrayList<ArrayList<Long>> compactedGPUPointerArray;
 
         private ArrayList<Boolean> isMemoryAvailableArray;
         private HashMap<Long, Integer> threadIdToMemoryIndexMap;
@@ -52,6 +53,7 @@ public final class NoiseHardwareAccelerator {
             zRegionMaterialGPUPointerArray= new ArrayList<>(gpuThreads);
             pGPUPointerArray =new ArrayList<>(gpuThreads);
             outputGPUPointerArray =new ArrayList<>(gpuThreads);
+            compactedGPUPointerArray =new ArrayList<>(gpuThreads);
 
             for (int i=0;i<gpuThreads;i++){
                 isMemoryAvailableArray.add(true);
@@ -61,6 +63,7 @@ public final class NoiseHardwareAccelerator {
                 zRegionMaterialGPUPointerArray.add(new ArrayList<>());
                 pGPUPointerArray.add(new ArrayList<>());
                 outputGPUPointerArray.add(new ArrayList<>());
+                compactedGPUPointerArray.add(new ArrayList<>());
             }
 
 
@@ -94,6 +97,12 @@ public final class NoiseHardwareAccelerator {
             int index=getMemoryIndex(threadId,this.outputGPUPointerArray);
 
             return this.outputGPUPointerArray.get(index).get(materialIndex);
+        }
+
+        public long getCompactedOutputGPUMemoryPointer(long threadId, int materialIndex){
+            int index=getMemoryIndex(threadId,this.compactedGPUPointerArray);
+
+            return this.compactedGPUPointerArray.get(index).get(materialIndex);
         }
 
         private synchronized int getMemoryIndex(long threadId, ArrayList<ArrayList<Long>> gpuPointerArray){
@@ -141,6 +150,7 @@ public final class NoiseHardwareAccelerator {
                 this.zRegionMaterialGPUPointerArray.get(memoryIndex).set(materialIndex, response.getzRegionGPUPointer());
                 this.pGPUPointerArray.get(memoryIndex).set(materialIndex, response.getpRegionGPUPointer());
                 this.outputGPUPointerArray.get(memoryIndex).set(materialIndex,response.getOutputRegionGPUPointer());
+                this.compactedGPUPointerArray.get(memoryIndex).set(materialIndex,response.getCompactedOutputGPUPointer());
                 return;
             }
 
@@ -154,6 +164,7 @@ public final class NoiseHardwareAccelerator {
                     this.zRegionMaterialGPUPointerArray.get(memoryIndex).set(materialIndex, response.getzRegionGPUPointer());
                     this.pGPUPointerArray.get(memoryIndex).set(materialIndex, response.getpRegionGPUPointer());
                     this.outputGPUPointerArray.get(memoryIndex).set(materialIndex, response.getOutputRegionGPUPointer());
+                    this.compactedGPUPointerArray.get(memoryIndex).set(materialIndex, response.getCompactedOutputGPUPointer());
                 }
             }
         }
@@ -167,6 +178,7 @@ public final class NoiseHardwareAccelerator {
         long zRegionArrayPointer=this.availableGPUMemoryController.getZGPUMemoryPointer(threadId,materialIndex);
         long pArrayPointer=this.availableGPUMemoryController.getPGPUMemoryPointer(threadId,materialIndex);
         long outputArrayPointer=this.availableGPUMemoryController.getOutputGPUMemoryPointer(threadId,materialIndex);
+        long compactedOutputArrayPointer = this.availableGPUMemoryController.getCompactedOutputGPUMemoryPointer(threadId,materialIndex);
 
         ResourcesExporter resourcesExporter = this.regionExporters.get(regionCoords);
         if (resourcesExporter==null){
@@ -184,9 +196,7 @@ public final class NoiseHardwareAccelerator {
                materialChances[i] = PerlinNoise.getLevelForPromillage(Math.min(resourceSettings.getChance(resourcesExporter.activeMaterials[materialIndex]) * i / 8f, 1000f));
        }
 
-        ByteBuffer output = ByteBuffer.allocateDirect(512*512*(materialMaxHeight-materialMinHeight)); //one bit for each block to determine if it should or shouldn't place a block of a material type.
-
-        return new NoiseHardwareAcceleratorRequest(materialSeed,regionCoords.x,regionCoords.y,materialMinHeight, materialMaxHeight,xRegionArrayPointer,yRegionArrayPointer,zRegionArrayPointer,pArrayPointer,outputArrayPointer,output,materialChances);
+        return new NoiseHardwareAcceleratorRequest(materialSeed,regionCoords.x,regionCoords.y,materialMinHeight, materialMaxHeight,xRegionArrayPointer,yRegionArrayPointer,zRegionArrayPointer,pArrayPointer,outputArrayPointer,compactedOutputArrayPointer,materialChances);
     }
 
     public static NoiseHardwareAccelerator getInstance(){
@@ -202,7 +212,7 @@ public final class NoiseHardwareAccelerator {
 
     public native static NoiseHardwareAcceleratorResponse getRegionNoiseData(NoiseHardwareAcceleratorRequest request);
 
-    public HashMap<Point,HashMap<Integer,ByteBuffer>> calculatedNoises;
+    public HashMap<Point,HashMap<Integer,int[]>> calculatedNoises;
 
     private HashMap<Point, ResourcesExporter> regionExporters;
 
@@ -222,20 +232,6 @@ public final class NoiseHardwareAccelerator {
         this.availableGPUMemoryController.freeMemoryIndex(threadId);
     }
 
-    private int hitCounter = 0;
-    private int missCounter = 0;
-
-    public synchronized void addCounter(boolean hit){
-        if (hit){
-            hitCounter++;
-        }else{
-            missCounter++;
-        }
-        if ((hitCounter+missCounter)%10000000==0){
-            System.out.println("Hit "+hitCounter+" times out of "+missCounter+hitCounter+" for a utilization rate of "+((float)hitCounter/(hitCounter+missCounter)));
-        }
-    }
-
     public void addCalculatedNoiseForRegion(Point regionCoords, int materialIndex, long threadId){
 
         if (this.calculatedNoises.size()>gpuThreads){ //do cpu instead //todo check if gpu memory is full instead
@@ -251,24 +247,24 @@ public final class NoiseHardwareAccelerator {
 
         NoiseHardwareAcceleratorResponse response=NoiseHardwareAccelerator.getRegionNoiseData(noiseHardwareAcceleratorRequest);
 
-        ByteBuffer outputByteBuffer=noiseHardwareAcceleratorRequest.getOutputArray();
+        int[] outputIndexes= response.getOutput();
 
-        if (outputByteBuffer==null){
+        if (outputIndexes==null){
             return;
         }
 
         this.availableGPUMemoryController.setGPUMemoryPointers(threadId,materialIndex,response);
 
-        this.setCalculatedNoises(materialIndex,regionCoords,outputByteBuffer);
+        this.setCalculatedNoises(materialIndex,regionCoords,outputIndexes);
     }
 
-    private synchronized void setCalculatedNoises(Integer materialIndex,Point regionCoords, ByteBuffer outputByteBuffer){
+    private synchronized void setCalculatedNoises(Integer materialIndex,Point regionCoords, int[] outputIndexes){
         if (this.calculatedNoises.containsKey(regionCoords)){
-            this.calculatedNoises.get(regionCoords).put(materialIndex, outputByteBuffer);
+            this.calculatedNoises.get(regionCoords).put(materialIndex, outputIndexes);
         }
         else{
-            HashMap<Integer, ByteBuffer> innerMap = new HashMap<Integer, ByteBuffer>();
-            innerMap.put(materialIndex, outputByteBuffer);
+            HashMap<Integer, int[]> innerMap = new HashMap<Integer, int[]>();
+            innerMap.put(materialIndex, outputIndexes);
             this.calculatedNoises.put(regionCoords, innerMap);
         }
     }

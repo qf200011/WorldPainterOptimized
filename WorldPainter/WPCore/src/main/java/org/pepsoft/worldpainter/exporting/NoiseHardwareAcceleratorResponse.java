@@ -1,27 +1,29 @@
 package org.pepsoft.worldpainter.exporting;
 
 public class NoiseHardwareAcceleratorResponse {
-    private float[] output;
+    private int[] output;
     private  long xRegionGPUPointer;
     private  long yRegionGPUPointer;
     private  long zRegionGPUPointer;
     private  long pRegionGPUPointer;
     private  long outputRegionGPUPointer;
+    private long compactedOutputGPUPointer;
 
-    public NoiseHardwareAcceleratorResponse(float[] output, long xRegionGPUPointer, long yRegionGPUPointer, long zRegionGPUPointer, long pRegionGPUPointer, long outputRegionGPUPointer){
+    public NoiseHardwareAcceleratorResponse(int[] output, long xRegionGPUPointer, long yRegionGPUPointer, long zRegionGPUPointer, long pRegionGPUPointer, long outputRegionGPUPointer, long compactedOutputGPUPointer){
         this.output=output;
         this.xRegionGPUPointer=xRegionGPUPointer;
         this.yRegionGPUPointer=yRegionGPUPointer;
         this.zRegionGPUPointer=zRegionGPUPointer;
         this.pRegionGPUPointer=pRegionGPUPointer;
         this.outputRegionGPUPointer=outputRegionGPUPointer;
+        this.compactedOutputGPUPointer=compactedOutputGPUPointer;
     }
 
-    public float[] getOutput() {
+    public int[] getOutput() {
         return output;
     }
 
-    public void setOutput(float[] output) {
+    public void setOutput(int[] output) {
         this.output = output;
     }
 
@@ -63,5 +65,13 @@ public class NoiseHardwareAcceleratorResponse {
 
     public void setOutputRegionGPUPointer(long outputRegionGPUPointer) {
         this.outputRegionGPUPointer = outputRegionGPUPointer;
+    }
+
+    public long getCompactedOutputGPUPointer() {
+        return compactedOutputGPUPointer;
+    }
+
+    public void setCompactedOutputGPUPointer(long compactedOutputGPUPointer) {
+        this.compactedOutputGPUPointer = compactedOutputGPUPointer;
     }
 }

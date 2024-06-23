@@ -6,6 +6,8 @@
 #include <stdlib.h>
 #include "NoiseGeneration.h"
 #include <windows.h>
+#include <thrust/device_vector.h>
+#include <thrust/copy.h>
 
 #include <chrono>
 #include <stdio.h>
@@ -22,14 +24,16 @@
 #define MIN_HEIGHT -64
 #define X_ARRAY_SIZE 512
 #define Y_ARRAY_SIZE 512
+#define DEBUGGING true
 
-cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* regionArrayY, float* regionArrayZ, byte* output, int totalHeight, long long& dev_regionArrayXPtr, long long& dev_regionArrayYPtr, long long& dev_regionArrayZPtr, long long& dev_pPtr, long long& dev_outputPtr);
+cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* regionArrayY, float* regionArrayZ, bool* output, int& outputSize, int totalHeight, long long& dev_regionArrayXPtr, long long& dev_regionArrayYPtr, long long& dev_regionArrayZPtr, long long& dev_pPtr, long long& dev_outputPtr, long long& dev_compactedOutputPtr);
 void getRegionArray(float* regionArrayX, float* regionArrayY, float* regionArrayZ, int minHeight, int maxHeight, int regionX, int regionY);
 void getPArray(int* p, JNIEnv* env, jlong seed);
 void swap(int* array, int index1, int index2);
+void freeCudaMemory(int* dev_p, float* dev_regionArrayX, float* dev_regionArrayY, float* dev_regionArrayZ, bool* dev_output, int* dev_compactedOutput);
 
 
-__global__ void generateNoise(int* p, float* chances, float* regionArrayX, float* regionArrayY, float* regionArrayZ, byte *output, int totalHeight)
+__global__ void generateNoise(int* p, float* chances, float* regionArrayX, float* regionArrayY, float* regionArrayZ, bool *output, int totalHeight)
 {
     /*int x=128;
     int y=128;
@@ -51,50 +55,7 @@ __global__ void generateNoise(int* p, float* chances, float* regionArrayX, float
 
     bool shouldSetMaterial = outputNoise >= chances[8];
 
-
-
-    int index = blockIdx.x + (blockIdx.y * X_ARRAY_SIZE) + (threadIdx.x * X_ARRAY_SIZE * totalHeight);
-    int byteIndex = index / 8;
-    int bitIndex = index % 8;
-
-    if (shouldSetMaterial && bitIndex == 0) {
-        output[byteIndex] |= (1 << bitIndex);
-    }
-    __syncthreads();
-    if (shouldSetMaterial && bitIndex == 1) {
-        output[byteIndex] |= (1 << bitIndex);
-       
-    }
-    __syncthreads();
-    if (shouldSetMaterial && bitIndex == 2) {
-        output[byteIndex] |= (1 << bitIndex);
-        
-    }
-    __syncthreads();
-    if (shouldSetMaterial && bitIndex == 3) {
-        output[byteIndex] |= (1 << bitIndex);
-        
-    }
-    __syncthreads();
-    if (shouldSetMaterial && bitIndex == 4) {
-        output[byteIndex] |= (1 << bitIndex);
-        
-    }
-    __syncthreads();
-    if (shouldSetMaterial && bitIndex == 5) {
-        output[byteIndex] |= (1 << bitIndex);
-        
-    }
-    __syncthreads();
-    if (shouldSetMaterial && bitIndex == 6) {
-        output[byteIndex] |= (1 << bitIndex);
-        
-    }
-    __syncthreads();
-    if (shouldSetMaterial && bitIndex == 7) {
-        output[byteIndex] |= (1 << bitIndex);
-        output[blockIdx.x + (blockIdx.y * X_ARRAY_SIZE) + (threadIdx.x * X_ARRAY_SIZE * totalHeight)];
-    }
+    output[blockIdx.x + (blockIdx.y * X_ARRAY_SIZE) + (threadIdx.x * X_ARRAY_SIZE * X_ARRAY_SIZE)] = shouldSetMaterial;
 
 }
 
@@ -146,8 +107,17 @@ int main()
     //return 0;
 }
 
+struct is_true {
+    __host__ __device__
+        bool operator() (const bool success) {
+        return success;
+    }
+};
+
+
+
 // Helper function for using CUDA to add vectors in parallel.
-cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* regionArrayY, float* regionArrayZ, byte*  output,int totalHeight, long long &dev_regionArrayXPtr, long long &dev_regionArrayYPtr, long long& dev_regionArrayZPtr, long long& dev_pPtr, long long &dev_outputPtr)
+cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* regionArrayY, float* regionArrayZ, int*&  output,int& outputSize, int totalHeight, long long &dev_regionArrayXPtr, long long &dev_regionArrayYPtr, long long& dev_regionArrayZPtr, long long& dev_pPtr, long long &dev_outputPtr, long long& dev_compactedOutputPtr)
 {
     std::clock_t c_start = std::clock();
 
@@ -155,8 +125,11 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
     float* dev_regionArrayX;
     float* dev_regionArrayY;
     float* dev_regionArrayZ;
-    byte* dev_output;
+    bool* dev_output;
+    int* dev_CompactedOutput;
     float* dev_chances;
+
+    const int OUTPUT_SIZE = X_ARRAY_SIZE * Y_ARRAY_SIZE * totalHeight;
 
     cudaError_t cudaStatus;
     auto t_start = std::chrono::high_resolution_clock::now();
@@ -164,14 +137,16 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
     cudaStatus = cudaSetDevice(0);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?");
-        goto Error;
+        freeCudaMemory(dev_p, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output, dev_CompactedOutput);
+        return cudaStatus;
     }
 
     if (dev_pPtr == 0){
         cudaStatus = cudaMalloc((void**)&dev_p, 512 * sizeof(int));
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "cudaMalloc failed!");
-            goto Error;
+            freeCudaMemory(dev_p, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output, dev_CompactedOutput);
+            return cudaStatus;
         }
     }
     else { //reuse
@@ -181,7 +156,8 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
     cudaStatus = cudaMalloc((void**)&dev_chances, 16 * sizeof(float));
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMalloc failed!");
-        goto Error;
+        freeCudaMemory(dev_p, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output, dev_CompactedOutput);
+        return cudaStatus;
     }
 
     if (dev_regionArrayXPtr==0){
@@ -189,7 +165,8 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMalloc failed!");
         fprintf(stderr, cudaGetErrorString(cudaStatus));
-        goto Error;
+        freeCudaMemory(dev_p, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output, dev_CompactedOutput);
+        return cudaStatus;
     }
     }
     else { //reuse
@@ -200,7 +177,8 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
         cudaStatus = cudaMalloc((void**)&dev_regionArrayY, Y_ARRAY_SIZE * sizeof(float));
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "cudaMalloc failed!");
-            goto Error;
+            freeCudaMemory(dev_p, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output, dev_CompactedOutput);
+            return cudaStatus;
         }
     }
     else { //reuse
@@ -211,7 +189,8 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
         cudaStatus = cudaMalloc((void**)&dev_regionArrayZ, totalHeight * sizeof(float));
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "cudaMalloc failed!");
-            goto Error;
+            freeCudaMemory(dev_p, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output, dev_CompactedOutput);
+            return cudaStatus;
         }
     }
     else { //reuse
@@ -220,54 +199,74 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
 
     if (dev_outputPtr==0)
     {
-        cudaStatus = cudaMalloc((void**)&dev_output, (X_ARRAY_SIZE * Y_ARRAY_SIZE * totalHeight)); //going to be bits
+        cudaStatus = cudaMalloc((void**)&dev_output,sizeof(bool)* OUTPUT_SIZE); //Varies by height but roughly 25MB
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "cudaMalloc failed!");
-            goto Error;
+            freeCudaMemory(dev_p, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output, dev_CompactedOutput);
+            return cudaStatus;
         }
     }
     else { //reuse
-        dev_output = (byte*)dev_outputPtr;
+        dev_output = (bool*)dev_outputPtr;
+    }
+    if (dev_compactedOutputPtr == 0) {
+        cudaStatus = cudaMalloc((void**)&dev_CompactedOutput, (OUTPUT_SIZE) * sizeof(int)); // Varies by height but roughly 100MB
+        if (cudaStatus != cudaSuccess) {
+            fprintf(stderr, "cudaMalloc failed!");
+            freeCudaMemory(dev_p, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output, dev_CompactedOutput);
+            return cudaStatus;
+        }
+    }
+    else {
+        dev_CompactedOutput = (int*)dev_compactedOutputPtr;
     }
 
     // Copy input vectors from host memory to GPU buffers.
     cudaStatus = cudaMemcpy(dev_p, p, 512 * sizeof(int), cudaMemcpyHostToDevice);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMemcpy failed!", cudaGetErrorString(cudaStatus));
-        goto Error;
+        freeCudaMemory(dev_p, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output, dev_CompactedOutput);
+        return cudaStatus;
     }
 
     // Copy input vectors from host memory to GPU buffers.
     cudaStatus = cudaMemcpy(dev_chances, chances, 16 * sizeof(float), cudaMemcpyHostToDevice);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMemcpy failed!", cudaGetErrorString(cudaStatus));
-        goto Error;
+        freeCudaMemory(dev_p, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output, dev_CompactedOutput);
+        return cudaStatus;
     }
 
     cudaStatus = cudaMemcpy(dev_regionArrayX, regionArrayX, X_ARRAY_SIZE * sizeof(float), cudaMemcpyHostToDevice);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMemcpy failed!", cudaGetErrorString(cudaStatus));
-        goto Error;
+        freeCudaMemory(dev_p, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output, dev_CompactedOutput);
+        return cudaStatus;
     }
 
     cudaStatus = cudaMemcpy(dev_regionArrayY, regionArrayY, Y_ARRAY_SIZE * sizeof(float), cudaMemcpyHostToDevice);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMemcpy failed!", cudaGetErrorString(cudaStatus));
-        goto Error;
+        freeCudaMemory(dev_p, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output, dev_CompactedOutput);
+        return cudaStatus;
     }
 
     cudaStatus = cudaMemcpy(dev_regionArrayZ, regionArrayZ, totalHeight * sizeof(float), cudaMemcpyHostToDevice);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMemcpy failed!", cudaGetErrorString(cudaStatus));
-        goto Error;
+        freeCudaMemory(dev_p, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output, dev_CompactedOutput);
+        return cudaStatus;
     }
-    auto t_end = std::chrono::high_resolution_clock::now();
-    double elapsed_time_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
-    //printf("Allocated Memory: %f\n", elapsed_time_ms);
 
     std::clock_t c_end = std::clock();
     double time_elapsed_ms = 1000.0 * (c_end - c_start) / CLOCKS_PER_SEC;
-    //printf("Clocktime for inputs: %lf\n", time_elapsed_ms);
+    if (DEBUGGING) printf("Clocktime for inputs: %lf\n", time_elapsed_ms);
+
+
+
+
+
+
 
     // Launch a kernel on the GPU with one thread for each element.
     cudaStream_t stream;
@@ -279,34 +278,41 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
     cudaStatus = cudaGetLastError();
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "addKernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
-        goto Error;
+        freeCudaMemory(dev_p, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output, dev_CompactedOutput);
+        return cudaStatus;
     }
 
     c_end = std::clock();
     time_elapsed_ms = 1000.0 * (c_end - c_start) / CLOCKS_PER_SEC;
-    //printf("Clocktime for computation before sleep: %lf\n", time_elapsed_ms);
+    if (DEBUGGING) printf("Clocktime for computation before sleep: %lf\n", time_elapsed_ms);
     
     // cudaDeviceSynchronize waits for the kernel to finish, and returns
     // any errors encountered during the launch.
     while (cudaStreamQuery(stream) == cudaErrorNotReady) {
-        printf("Time to sleep!");
         Sleep(10);
     }
 
     c_end = std::clock();
     time_elapsed_ms = 1000.0 * (c_end - c_start) / CLOCKS_PER_SEC;
-    //printf("Clocktime for computation before synchronize: %lf\n", time_elapsed_ms);
-
-
-    cudaStatus = cudaDeviceSynchronize();
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching addKernel!\n", cudaStatus);
-        goto Error;
-    }
+    if (DEBUGGING)printf("Clocktime for computation before synchronize: %lf\n", time_elapsed_ms);
 
     c_end = std::clock();
     time_elapsed_ms = 1000.0 * (c_end - c_start) / CLOCKS_PER_SEC;
-    //printf("Clocktime for computation after synchronize: %lf\n", time_elapsed_ms);
+    if (DEBUGGING) printf("Clocktime for computation after synchronize: %lf\n", time_elapsed_ms);
+
+    thrust::device_ptr<bool> t_output(dev_output);
+    thrust::device_ptr<int> t_compactedOutput(dev_CompactedOutput);
+    thrust::device_vector<bool> d_outputVector(t_output, t_output + OUTPUT_SIZE);
+    thrust::device_vector<int> d_compactedOutputVector(t_compactedOutput, t_compactedOutput + OUTPUT_SIZE);
+
+    thrust::device_vector<int>::iterator t_compactedOutputEnd =
+        thrust::copy_if(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(OUTPUT_SIZE), d_outputVector.begin(), d_compactedOutputVector.begin(), is_true());
+
+    outputSize = thrust::distance(d_compactedOutputVector.begin(), t_compactedOutputEnd);
+
+    output = new int[outputSize];
+
+    thrust::copy(d_compactedOutputVector.begin(), t_compactedOutputEnd, output);
 
     //save pointers for reuse
     dev_pPtr = (long long)dev_p;
@@ -314,32 +320,23 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
     dev_regionArrayYPtr = (long long)dev_regionArrayY;
     dev_regionArrayZPtr = (long long)dev_regionArrayZ;
     dev_outputPtr = (long long)dev_output;
-
-    t_end = std::chrono::high_resolution_clock::now();
-    elapsed_time_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
-    //printf("Finished computing: %f\n", elapsed_time_ms);
-
-    // Copy output vector from GPU buffer to host memory.
-    cudaStatus = cudaMemcpy(output, dev_output, (X_ARRAY_SIZE * Y_ARRAY_SIZE * totalHeight)/8, cudaMemcpyDeviceToHost);
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaMemcpy failed!", cudaGetErrorString(cudaStatus));
-        goto Error;
-    }
+    dev_compactedOutputPtr = (long long)dev_CompactedOutput;
 
     c_end = std::clock();
     time_elapsed_ms = 1000.0 * (c_end - c_start) / CLOCKS_PER_SEC;
-    //printf("Clocktime for after copying results: %lf\n", time_elapsed_ms);
+    if (DEBUGGING) printf("Clocktime for after copying results: %lf\n", time_elapsed_ms);
+    
+    return cudaStatus;
+}
 
-Error:
-    /*cudaFree(dev_p);
+
+
+void freeCudaMemory(int* dev_p, float* dev_regionArrayX, float* dev_regionArrayY, float* dev_regionArrayZ, bool* dev_output, int* dev_compactedOutput) {
     cudaFree(dev_regionArrayX);
     cudaFree(dev_regionArrayY);
     cudaFree(dev_regionArrayZ);
-    cudaFree(dev_output);*/
-
-    cudaFree(dev_chances);
-    
-    return cudaStatus;
+    cudaFree(dev_output);
+    cudaFree(dev_compactedOutput);
 }
 
 
@@ -411,7 +408,7 @@ void swap(int* array, int index1, int index2) {
     array[index2] = temp;
 }
 
-void getDataFromRequest(JNIEnv* env, jobject request, jlong& materialSeed, jint& regionX, jint& regionY, jint& materialMinHeight, jint& materialMaxHeight, jlong& regionXPtr, jlong& regionYPtr, jlong& regionZPtr, jlong& pPtr, jlong& outputPtr, byte*& outputArray, float*& chances) {
+void getDataFromRequest(JNIEnv* env, jobject request, jlong& materialSeed, jint& regionX, jint& regionY, jint& materialMinHeight, jint& materialMaxHeight, jlong& regionXPtr, jlong& regionYPtr, jlong& regionZPtr, jlong& pPtr, jlong& outputPtr, jlong& compactedOutputPtr, int*& outputArray, float*& chances) {
     jclass noiseHardwareAcceleratorRequestClass = env->FindClass("org/pepsoft/worldpainter/exporting/NoiseHardwareAcceleratorRequest");
 
     jmethodID getMaterialSeedMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getMaterialSeed", "()J");
@@ -424,7 +421,8 @@ void getDataFromRequest(JNIEnv* env, jobject request, jlong& materialSeed, jint&
     jmethodID getRegionZPtrMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getRegionZPtr", "()J");
     jmethodID getpPtrMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getpPtr", "()J");
     jmethodID getOutputPtrMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getOutputPtr", "()J");
-    jmethodID getOutputArrayMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getOutputArray", "()Ljava/nio/ByteBuffer;");
+    jmethodID getCompactedOutputPtrMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getCompactedOutputPtr", "()J");
+
     jmethodID getChancesMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getChances", "()[F");
 
     materialSeed = env->CallLongMethod(request, getMaterialSeedMethod);
@@ -437,25 +435,30 @@ void getDataFromRequest(JNIEnv* env, jobject request, jlong& materialSeed, jint&
     regionZPtr = env->CallLongMethod(request, getRegionZPtrMethod);
     pPtr = env->CallLongMethod(request, getpPtrMethod);
     outputPtr = env->CallLongMethod(request, getOutputPtrMethod);
-    jobject outputArrayBuffer = env->CallObjectMethod(request, getOutputArrayMethod);
-    outputArray = (byte*)env->GetDirectBufferAddress(outputArrayBuffer);
+    compactedOutputPtr = env->CallLongMethod(request, getCompactedOutputPtrMethod);
     jfloatArray chancesArray = (jfloatArray)env->CallObjectMethod(request, getChancesMethod);
     chances = env->GetFloatArrayElements(chancesArray, 0);
 }
 
 
-jobject createResponse(JNIEnv* env, long long dev_regionXPtr, long long dev_regionYPtr, long long dev_regionZPtr, long long dev_pPtr, long long dev_outputPtr, int totalHeight) {
+jobject createResponse(JNIEnv* env, int size, int* output, long long dev_regionXPtr, long long dev_regionYPtr, long long dev_regionZPtr, long long dev_pPtr, long long dev_outputPtr, long long dev_compactedOutputPtr, int totalHeight) {
     jclass noiseHardwareAcceleratorResponseClass = env->FindClass("org/pepsoft/worldpainter/exporting/NoiseHardwareAcceleratorResponse");
 
-    jmethodID constructorMethod = env->GetMethodID(noiseHardwareAcceleratorResponseClass, "<init>", "([FJJJJJ)V");
+    jmethodID constructorMethod = env->GetMethodID(noiseHardwareAcceleratorResponseClass, "<init>", "([IJJJJJJ)V");
+
+    jintArray result = env->NewIntArray(size);
+    env->SetIntArrayRegion(result, 0, size, (jint*)output);
+
+    delete[] output;
 
     jlong pPtr = (jlong)dev_pPtr;
     jlong regionXPtr = (jlong)dev_regionXPtr;
     jlong regionYPtr = (jlong)dev_regionYPtr;
     jlong regionZPtr = (jlong)dev_regionZPtr;
     jlong outputPtr = (jlong)dev_outputPtr;
+    jlong compactedOutputPtr = (jlong)dev_compactedOutputPtr;
 
-    jobject response = env->NewObject(noiseHardwareAcceleratorResponseClass, constructorMethod, NULL, regionXPtr, regionYPtr, regionZPtr, pPtr, outputPtr);
+    jobject response = env->NewObject(noiseHardwareAcceleratorResponseClass, constructorMethod, result, regionXPtr, regionYPtr, regionZPtr, pPtr, outputPtr,compactedOutputPtr);
 
     return response;
 }
@@ -474,10 +477,12 @@ JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_NoiseHardwareA
     jlong dev_regionZPtr;
     jlong dev_pPtr;
     jlong dev_outputPtr;
-    byte* outputArray;
+    jlong dev_compactedOutputPtr;
+    int* outputArray;
     float* chances;
+    int outputSize;
 
-    getDataFromRequest(env, request, materialSeed, regionX, regionY, materialMinHeight, materialMaxHeight, dev_regionXPtr, dev_regionYPtr, dev_regionZPtr, dev_pPtr, dev_outputPtr, outputArray, chances);
+    getDataFromRequest(env, request, materialSeed, regionX, regionY, materialMinHeight, materialMaxHeight, dev_regionXPtr, dev_regionYPtr, dev_regionZPtr, dev_pPtr, dev_outputPtr, dev_compactedOutputPtr, outputArray, chances);
 
 
     const int totalHeight = materialMaxHeight - materialMinHeight;
@@ -497,17 +502,7 @@ JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_NoiseHardwareA
 
     // Add vectors in parallel.
 
-    cudaError_t cudaStatus = noiseWithCuda(p, chances, regionArrayX, regionArrayY, regionArrayZ, outputArray, totalHeight, dev_regionXPtr, dev_regionYPtr, dev_regionZPtr, dev_pPtr, dev_outputPtr);
-
-    int size = X_ARRAY_SIZE * Y_ARRAY_SIZE * totalHeight * 8;
-    int counter = 0;
-    for (int i = 0; i < size; i++) {
-        int byteIndex = i / 8;
-        int bitIndex = i & 8;
-        if ((outputArray[byteIndex] >> bitIndex) & 1){
-            counter++;
-        }
-    }
+    cudaError_t cudaStatus = noiseWithCuda(p, chances, regionArrayX, regionArrayY, regionArrayZ, outputArray, outputSize, totalHeight, dev_regionXPtr, dev_regionYPtr, dev_regionZPtr, dev_pPtr, dev_outputPtr, dev_compactedOutputPtr);
 
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "addWithCuda failed!");
@@ -527,7 +522,7 @@ JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_NoiseHardwareA
         return NULL;
     }*/
     
-    jobject result = createResponse(env,dev_regionXPtr, dev_regionYPtr, dev_regionZPtr, dev_pPtr,dev_outputPtr, totalHeight);
+    jobject result = createResponse(env,outputSize, outputArray, dev_regionXPtr, dev_regionYPtr, dev_regionZPtr, dev_pPtr,dev_outputPtr, dev_compactedOutputPtr, totalHeight);
    
     delete[] regionArrayZ;
 

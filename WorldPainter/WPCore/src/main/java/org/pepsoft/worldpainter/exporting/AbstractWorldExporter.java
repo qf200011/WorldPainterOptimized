@@ -238,7 +238,7 @@ public abstract class AbstractWorldExporter implements WorldExporter {
             try {
                 // Export each individual region
                 for (Point region: sortedRegions) {
-                    final ExecutorService gpuExecutor = createGPUExecutorService("calculating", 2);
+                    final ExecutorService gpuExecutor = createGPUExecutorService("calculating", 1);
                     final Point regionCoords = region;
                     executor.execute(() -> {
                         if (abort.get()) {
@@ -275,7 +275,8 @@ public abstract class AbstractWorldExporter implements WorldExporter {
                                             }
                                             final int index = i;
 
-                                                if (index==0) System.out.println("GPU Created!!!");
+
+                                                /*if (index==0) System.out.println("GPU Created!!!");*/
                                             gpuExecutor.execute(() ->{
 
                                                     noiseHardwareAccelerator.addCalculatedNoiseForRegion(regionCoords, index,threadId);
@@ -289,8 +290,8 @@ public abstract class AbstractWorldExporter implements WorldExporter {
 
                                         Instant endTime = Instant.now();
                                         long timeElapsed = Duration.between(startTime,endTime).toMillis();
-                                        System.out.println();
-                                        System.out.println(timeElapsed);
+                                        /*System.out.println();
+                                        System.out.println(timeElapsed);*/
                                     }
                                 }
 

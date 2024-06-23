@@ -17,12 +17,11 @@ public class NoiseHardwareAcceleratorRequest {
     private long regionZPtr;
     private long pPtr;
     private long outputPtr;
-
-    private ByteBuffer outputArray;
+    private long compactedOutputPtr;
     private float[] chances;
 
 
-    public NoiseHardwareAcceleratorRequest(long materialSeed, int regionX, int regionY, int materialMinHeight, int materialMaxHeight, long regionXPtr, long regionYPtr, long regionZPtr, long pPtr, long outputPtr,ByteBuffer outputArray, float[] chances) {
+    public NoiseHardwareAcceleratorRequest(long materialSeed, int regionX, int regionY, int materialMinHeight, int materialMaxHeight, long regionXPtr, long regionYPtr, long regionZPtr, long pPtr, long outputPtr, long compactedOutputPtr, float[] chances) {
         this.materialSeed = materialSeed;
         this.regionX = regionX;
         this.regionY = regionY;
@@ -33,7 +32,7 @@ public class NoiseHardwareAcceleratorRequest {
         this.regionZPtr = regionZPtr;
         this.pPtr = pPtr;
         this.outputPtr = outputPtr;
-        this.outputArray=outputArray;
+        this.compactedOutputPtr=compactedOutputPtr;
         this.chances=chances;
     }
 
@@ -117,12 +116,12 @@ public class NoiseHardwareAcceleratorRequest {
         this.outputPtr = outputPtr;
     }
 
-    public ByteBuffer getOutputArray() {
-        return outputArray;
+    public long getCompactedOutputPtr() {
+        return compactedOutputPtr;
     }
 
-    public void setOutputArray(ByteBuffer outputArray) {
-        this.outputArray = outputArray;
+    public void setCompactedOutputPtr(long compactedOutputPtr) {
+        this.compactedOutputPtr = compactedOutputPtr;
     }
 
     public float[] getChances() {
