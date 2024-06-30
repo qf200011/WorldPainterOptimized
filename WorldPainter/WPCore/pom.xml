@@ -35,7 +35,7 @@
             <groupId>org.jetbrains</groupId>
             <artifactId>annotations</artifactId>
             <version>${jetbrains.annotations.version}</version>
-            <scope>provided</scope> <!-- Not really, but these annotations aren't needed at runtime. -->
+            <!--<scope>provided</scope> &lt;!&ndash; Not really, but these annotations aren't needed at runtime. &ndash;&gt;-->
         </dependency>
 
         <dependency>
@@ -128,19 +128,59 @@
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-dependencies</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/lib</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-antrun-plugin</artifactId>
                 <version>1.8</version>
                 <executions>
                     <execution>
+                        <id>generateHeader</id>
                         <phase>generate-sources</phase>
                         <configuration>
                             <target>
+                                <property name="runtime_classpath" refid="maven.runtime.classpath"/>
                                 <exec executable="javac">
                                     <arg value="-h"/>
-                                    <arg value="/header"/>
+                                    <arg value="header"/>
                                     <arg value="-cp"/>
-                                    <arg value="target/classes"/>
-                                    <arg value="src/main/java/org/pepsoft/worldpainter/exporting/NoiseHardwareAccelerator.java"/>
+                                    <arg value="${runtime_classpath}"/>
+                                    <arg value="src/main/java/org/pepsoft/worldpainter/exporting/gpuacceleration/ResourceNoiseGenerationRequest.java"/>
+                                </exec>
+                            </target>
+                        </configuration>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                    </execution>
+
+                    <execution>
+                        <id>generateDll</id>
+                        <phase>generate-sources</phase>
+                        <configuration>
+                            <target>
+                                <exec executable="nvcc">
+                                    <arg value="--shared"/>
+                                    <arg value="-o"/>
+                                    <arg value="target/mylib.dll"/>
+                                    <arg value="-I"/>
+                                    <arg value="${java.home}/include/win32"/>
+                                    <arg value="-I"/>
+                                    <arg value="${java.home}/include"/>
+                                    <arg value="../NoiseHardwareAccelerator/NoiseHardwareAccelerator/kernel.cu"/>
                                 </exec>
                             </target>
                         </configuration>

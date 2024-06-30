@@ -1,5 +1,6 @@
 package org.pepsoft.worldpainter.exporting.gpuacceleration;
 
+import org.pepsoft.worldpainter.exporting.NoiseHardwareAccelerator;
 import org.pepsoft.worldpainter.exporting.NoiseHardwareAcceleratorResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,6 +14,7 @@ public abstract class NoiseGenerationRequest {
     private final int regionY; //y direction on a map, not in game
     private final int minHeight;
     private final int maxHeight;
+    private final int heightOffset;
     private final float blobSize;
 
     private final GPUOptimizable gpuOptimizable;
@@ -20,17 +22,18 @@ public abstract class NoiseGenerationRequest {
     public static final int HEIGHT_SIZE=32;
 
 
-    public NoiseGenerationRequest(long seed, int regionX, int regionY, int startingHeight, float blobSize, GPUOptimizable gpuOptimizable) {
+    public NoiseGenerationRequest(long seed, int regionX, int regionY, int minHeight, int maxHeight, int heightOffset, float blobSize, GPUOptimizable gpuOptimizable) {
         this.seed = seed;
         this.regionX = regionX;
         this.regionY = regionY;
-        this.minHeight = startingHeight;
-        this.maxHeight = startingHeight+HEIGHT_SIZE;
+        this.minHeight = minHeight;
+        this.maxHeight = maxHeight;
+        this.heightOffset=heightOffset;
         this.blobSize=blobSize;
         this.gpuOptimizable=gpuOptimizable;
     }
 
-    public abstract NoiseHardwareAcceleratorResponse getRegionNoiseData();
+    public abstract NoiseHardwareAcceleratorResponse getRegionNoiseData(NoiseHardwareAccelerator.GPUNoiseRequest request);
 
     public long getSeed() {
         return seed;
@@ -50,6 +53,10 @@ public abstract class NoiseGenerationRequest {
 
     public int getMaxHeight() {
         return maxHeight;
+    }
+
+    public int getHeightOffset() {
+        return heightOffset;
     }
 
     public float getBlobSize() {

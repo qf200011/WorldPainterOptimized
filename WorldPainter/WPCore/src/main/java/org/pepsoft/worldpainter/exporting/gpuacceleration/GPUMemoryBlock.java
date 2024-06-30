@@ -2,14 +2,14 @@ package org.pepsoft.worldpainter.exporting.gpuacceleration;
 
 public class GPUMemoryBlock{
     //array of size of number of gpu memory allocations that contains an array of pointers to GPU memory.
-    private final Long xGPUPointer;
-    private final Long yGPUPointer;
-    private final Long zGPUPointer;
-    private final Long pGPUPointer;
-    private final Long outputGPUPointer;
-    private final Long compactedGPUPointer;
+    private final long xGPUPointer;
+    private final long yGPUPointer;
+    private final long zGPUPointer;
+    private final long pGPUPointer;
+    private final long outputGPUPointer;
+    private final long compactedGPUPointer;
 
-    public GPUMemoryBlock(Long xGPUPointer, Long yGPUPointer, Long zGPUPointer, Long pGPUPointer, Long outputGPUPointer, Long compactedGPUPointer) {
+    public GPUMemoryBlock(long xGPUPointer, long yGPUPointer, long zGPUPointer, long pGPUPointer, long outputGPUPointer, long compactedGPUPointer) {
         this.xGPUPointer = xGPUPointer;
         this.yGPUPointer = yGPUPointer;
         this.zGPUPointer = zGPUPointer;
@@ -22,27 +22,27 @@ public class GPUMemoryBlock{
         this(0L,0L,0L,0L,0L,0L);
     }
 
-    public Long getxGPUPointer() {
+    public long getxGPUPointer() {
         return xGPUPointer;
     }
 
-    public Long getyGPUPointer() {
+    public long getyGPUPointer() {
         return yGPUPointer;
     }
 
-    public Long getzGPUPointer() {
+    public long getzGPUPointer() {
         return zGPUPointer;
     }
 
-    public Long getpGPUPointer() {
+    public long getpGPUPointer() {
         return pGPUPointer;
     }
 
-    public Long getOutputGPUPointer() {
+    public long getOutputGPUPointer() {
         return outputGPUPointer;
     }
 
-    public Long getCompactedGPUPointer() {
+    public long getCompactedGPUPointer() {
         return compactedGPUPointer;
     }
 }

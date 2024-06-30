@@ -1,11 +1,11 @@
 ﻿
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
-#include "org_pepsoft_worldpainter_exporting_NoiseHardwareAccelerator.h"
-#include <jni.h>
+#include "org_pepsoft_worldpainter_exporting_gpuacceleration_ResourceNoiseGenerationRequest.h"
 #include <stdlib.h>
 #include "NoiseGeneration.h"
 #include <windows.h>
+#include <jni.h>
 #include <thrust/device_vector.h>
 #include <thrust/copy.h>
 
@@ -25,9 +25,10 @@
 #define X_ARRAY_SIZE 512
 #define Y_ARRAY_SIZE 512
 #define DEBUGGING false
+#define height 32
 
 cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* regionArrayY, float* regionArrayZ, bool* output, int& outputSize, int totalHeight, long long& dev_regionArrayXPtr, long long& dev_regionArrayYPtr, long long& dev_regionArrayZPtr, long long& dev_pPtr, long long& dev_outputPtr, long long& dev_compactedOutputPtr);
-void getRegionArray(float* regionArrayX, float* regionArrayY, float* regionArrayZ, int minHeight, int maxHeight, int regionX, int regionY);
+void getRegionArray(float* regionArrayX, float* regionArrayY, float* regionArrayZ, int minHeight, int maxHeight, int heightOffset, int regionX, int regionY, float blobSize);
 void getPArray(int* p, JNIEnv* env, jlong seed);
 void swap(int* array, int index1, int index2);
 void freeCudaMemory(int* dev_p, float* dev_regionArrayX, float* dev_regionArrayY, float* dev_regionArrayZ, bool* dev_output, int* dev_compactedOutput);
@@ -50,10 +51,13 @@ __global__ void generateNoise(int* p, float* chances, float* regionArrayX, float
         printf("(%d + %d  * %d ) + (%d  * %d )", blockIdx.x, blockIdx.y, Y_ARRAY_SIZE, threadIdx.x, Z_ARRAY_SIZE);
     }*/
 
-    float outputNoise = getPerlinNoiseAt(regionArrayX[blockIdx.x], regionArrayY[blockIdx.y], regionArrayZ[threadIdx.x], p);
-
+    float outputNoise = getPerlinNoiseAt(regionArrayX[blockIdx.x], regionArrayZ[threadIdx.x], regionArrayY[blockIdx.y], p);
 
     bool shouldSetMaterial = outputNoise >= chances[8];
+
+    /*if (blockIdx.x + (blockIdx.y * X_ARRAY_SIZE) + (threadIdx.x * X_ARRAY_SIZE * X_ARRAY_SIZE)==4426) {
+        printf("X: %f Y: %f Z: %f", regionArrayX[blockIdx.x], regionArrayY[blockIdx.y], regionArrayZ[threadIdx.x]);
+    }*/
 
     output[blockIdx.x + (blockIdx.y * X_ARRAY_SIZE) + (threadIdx.x * X_ARRAY_SIZE * X_ARRAY_SIZE)] = shouldSetMaterial;
 
@@ -129,7 +133,9 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
     int* dev_CompactedOutput;
     float* dev_chances;
 
-    const int OUTPUT_SIZE = X_ARRAY_SIZE * Y_ARRAY_SIZE * totalHeight;
+    const int MAX_OUTPUT_SIZE = X_ARRAY_SIZE * Y_ARRAY_SIZE * height;
+    const int CURRENT_OUTPUT_SIZE = X_ARRAY_SIZE * Y_ARRAY_SIZE * totalHeight;
+
 
     cudaError_t cudaStatus;
     auto t_start = std::chrono::high_resolution_clock::now();
@@ -186,7 +192,7 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
     }
 
     if (dev_regionArrayZPtr == 0){
-        cudaStatus = cudaMalloc((void**)&dev_regionArrayZ, totalHeight * sizeof(float));
+        cudaStatus = cudaMalloc((void**)&dev_regionArrayZ, height * sizeof(float));
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "cudaMalloc failed!");
             freeCudaMemory(dev_p, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output, dev_CompactedOutput);
@@ -199,7 +205,7 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
 
     if (dev_outputPtr==0)
     {
-        cudaStatus = cudaMalloc((void**)&dev_output,sizeof(bool)* OUTPUT_SIZE); //Varies by height but roughly 25MB
+        cudaStatus = cudaMalloc((void**)&dev_output,sizeof(bool)* MAX_OUTPUT_SIZE); //Varies by height but roughly 25MB
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "cudaMalloc failed!");
             freeCudaMemory(dev_p, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output, dev_CompactedOutput);
@@ -210,7 +216,7 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
         dev_output = (bool*)dev_outputPtr;
     }
     if (dev_compactedOutputPtr == 0) {
-        cudaStatus = cudaMalloc((void**)&dev_CompactedOutput, (OUTPUT_SIZE) * sizeof(int)); // Varies by height but roughly 100MB
+        cudaStatus = cudaMalloc((void**)&dev_CompactedOutput, (MAX_OUTPUT_SIZE) * sizeof(int)); // Varies by height but roughly 100MB
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "cudaMalloc failed!");
             freeCudaMemory(dev_p, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output, dev_CompactedOutput);
@@ -251,7 +257,7 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
         return cudaStatus;
     }
 
-    cudaStatus = cudaMemcpy(dev_regionArrayZ, regionArrayZ, totalHeight * sizeof(float), cudaMemcpyHostToDevice);
+    cudaStatus = cudaMemcpy(dev_regionArrayZ, regionArrayZ, height * sizeof(float), cudaMemcpyHostToDevice);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMemcpy failed!", cudaGetErrorString(cudaStatus));
         freeCudaMemory(dev_p, dev_regionArrayX, dev_regionArrayY, dev_regionArrayZ, dev_output, dev_CompactedOutput);
@@ -302,11 +308,11 @@ cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* re
 
     thrust::device_ptr<bool> t_output(dev_output);
     thrust::device_ptr<int> t_compactedOutput(dev_CompactedOutput);
-    thrust::device_vector<bool> d_outputVector(t_output, t_output + OUTPUT_SIZE);
-    thrust::device_vector<int> d_compactedOutputVector(t_compactedOutput, t_compactedOutput + OUTPUT_SIZE);
+    thrust::device_vector<bool> d_outputVector(t_output, t_output + CURRENT_OUTPUT_SIZE);
+    thrust::device_vector<int> d_compactedOutputVector(t_compactedOutput, t_compactedOutput + CURRENT_OUTPUT_SIZE);
 
     thrust::device_vector<int>::iterator t_compactedOutputEnd =
-        thrust::copy_if(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(OUTPUT_SIZE), d_outputVector.begin(), d_compactedOutputVector.begin(), is_true());
+        thrust::copy_if(thrust::make_counting_iterator<int>(0), thrust::make_counting_iterator<int>(CURRENT_OUTPUT_SIZE), d_outputVector.begin(), d_compactedOutputVector.begin(), is_true());
 
     outputSize = thrust::distance(d_compactedOutputVector.begin(), t_compactedOutputEnd);
 
@@ -342,30 +348,28 @@ void freeCudaMemory(int* dev_p, float* dev_regionArrayX, float* dev_regionArrayY
 }
 
 
-void getRegionArray(float* regionArrayX, float* regionArrayY, float* regionArrayZ, int minHeight, int maxHeight, int regionX, int regionY) {
+void getRegionArray(float* regionArrayX, float* regionArrayY, float* regionArrayZ, int minHeight, int maxHeight, int regionX, int regionY, float blobSize, int heightOffset) {
 
     int minTileX = regionX * 4;
     int minTileY = regionY * 4;
-    int maxTileX = minTileX + 5;
-    int maxTileY = minTileY + 5;
 
     for (int tileX = 0; tileX < TILES_PER_REGION_AXIS; tileX++) {
         for (int x = 0; x < CHUNK_SIZE * CHUNKS_PER_TILE_AXIS; x++) {
             int worldX = (tileX+minTileX)*TILE_SIZE + x;
-            regionArrayX[tileX * TILE_SIZE + x] = worldX / TINY_BLOBS;
+            regionArrayX[tileX * TILE_SIZE + x] = worldX / blobSize;
         }
     }
 
     for (int tileY = 0; tileY < TILES_PER_REGION_AXIS; tileY++) {
         for (int y = 0; y < CHUNK_SIZE * CHUNKS_PER_TILE_AXIS; y++) {
             int worldY = (tileY+minTileY)*TILE_SIZE + y;
-            regionArrayY[tileY * TILE_SIZE + y] = worldY / TINY_BLOBS;
+            regionArrayY[tileY * TILE_SIZE + y] = worldY / blobSize;
         }
     }
     int totalHeight = maxHeight - minHeight;
 
     for (int z = 0; z < totalHeight; z++) {
-        regionArrayZ[z] = (z-minHeight) / TINY_BLOBS;
+        regionArrayZ[z] = (z+minHeight) / blobSize;
     }
 }
 
@@ -410,43 +414,58 @@ void swap(int* array, int index1, int index2) {
     array[index2] = temp;
 }
 
-void getDataFromRequest(JNIEnv* env, jobject request, jlong& materialSeed, jint& regionX, jint& regionY, jint& materialMinHeight, jint& materialMaxHeight, jlong& regionXPtr, jlong& regionYPtr, jlong& regionZPtr, jlong& pPtr, jlong& outputPtr, jlong& compactedOutputPtr, int*& outputArray, float*& chances) {
-    jclass noiseHardwareAcceleratorRequestClass = env->FindClass("org/pepsoft/worldpainter/exporting/NoiseHardwareAcceleratorRequest");
+void getDataFromRequest(JNIEnv* env, jobject request, jlong& materialSeed, jint& regionX, jint& regionY, jint& materialMinHeight, jint& materialMaxHeight, jint& heightOffset, jfloat& blobSize, jlong& regionXPtr, jlong& regionYPtr, jlong& regionZPtr, jlong& pPtr, jlong& outputPtr, jlong& compactedOutputPtr, int*& outputArray, float*& chances) {
+    jclass gpuNoiseRequestClass = env->FindClass("org/pepsoft/worldpainter/exporting/NoiseHardwareAccelerator$GPUNoiseRequest");
+    jclass gpuMemoryBlockClass = env->FindClass("org/pepsoft/worldpainter/exporting/gpuacceleration/GPUMemoryBlock");
+    
+    jclass noiseHardwareAcceleratorRequestClass = env->FindClass("org/pepsoft/worldpainter/exporting/gpuacceleration/ResourceNoiseGenerationRequest");
 
-    jmethodID getMaterialSeedMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getMaterialSeed", "()J");
+    jmethodID getNoiseRequestMethod = env->GetMethodID(gpuNoiseRequestClass, "getNoiseGenerationRequest", "()Lorg/pepsoft/worldpainter/exporting/gpuacceleration/NoiseGenerationRequest;");
+    jobject noiseGnerationRequest = env->CallObjectMethod(request, getNoiseRequestMethod);
+
+    jmethodID getMaterialSeedMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getSeed", "()J");
     jmethodID getRegionXMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getRegionX", "()I");
     jmethodID getRegionYMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getRegionY", "()I");
-    jmethodID getMaterialMinHeightMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getMaterialMinHeight", "()I");
-    jmethodID getMaterialMaxHeightMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getMaterialMaxHeight", "()I");
-    jmethodID getRegionXPtrMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getRegionXPtr", "()J");
-    jmethodID getRegionYPtrMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getRegionYPtr", "()J");
-    jmethodID getRegionZPtrMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getRegionZPtr", "()J");
-    jmethodID getpPtrMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getpPtr", "()J");
-    jmethodID getOutputPtrMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getOutputPtr", "()J");
-    jmethodID getCompactedOutputPtrMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getCompactedOutputPtr", "()J");
-
+    jmethodID getMaterialMinHeightMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getMinHeight", "()I");
+    jmethodID getMaterialMaxHeightMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getMaxHeight", "()I");
+    jmethodID getMaterialHeightOffset = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getHeightOffset", "()I");
+    jmethodID getBlobSizeMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getBlobSize", "()F");
     jmethodID getChancesMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getChances", "()[F");
 
-    materialSeed = env->CallLongMethod(request, getMaterialSeedMethod);
-    regionX = env->CallIntMethod(request, getRegionXMethod);
-    regionY = env->CallIntMethod(request, getRegionYMethod);
-    materialMinHeight = env->CallIntMethod(request, getMaterialMinHeightMethod);
-    materialMaxHeight = env->CallIntMethod(request, getMaterialMaxHeightMethod);
-    regionXPtr = env->CallLongMethod(request, getRegionXPtrMethod);
-    regionYPtr = env->CallLongMethod(request, getRegionYPtrMethod);
-    regionZPtr = env->CallLongMethod(request, getRegionZPtrMethod);
-    pPtr = env->CallLongMethod(request, getpPtrMethod);
-    outputPtr = env->CallLongMethod(request, getOutputPtrMethod);
-    compactedOutputPtr = env->CallLongMethod(request, getCompactedOutputPtrMethod);
-    jfloatArray chancesArray = (jfloatArray)env->CallObjectMethod(request, getChancesMethod);
+    jmethodID getGPUMemoryBlockMethodId = env->GetMethodID(gpuNoiseRequestClass, "getGpuMemoryBlock", "()Lorg/pepsoft/worldpainter/exporting/gpuacceleration/GPUMemoryBlock;");
+    jobject gpuMemoryBlock = env->CallObjectMethod(request, getGPUMemoryBlockMethodId);
+
+    jmethodID getxGPUPointerMethod = env->GetMethodID(gpuMemoryBlockClass, "getxGPUPointer", "()J");
+    jmethodID getyGPUPointerMethod = env->GetMethodID(gpuMemoryBlockClass, "getyGPUPointer", "()J");
+    jmethodID getzGPUPointerMethod = env->GetMethodID(gpuMemoryBlockClass, "getzGPUPointer", "()J");
+    jmethodID getpGPUPointerMethod = env->GetMethodID(gpuMemoryBlockClass, "getpGPUPointer", "()J");
+    jmethodID getOutputGPUPointerMethod = env->GetMethodID(gpuMemoryBlockClass, "getOutputGPUPointer", "()J");
+    jmethodID getCompactedGPUPointerMethod = env->GetMethodID(gpuMemoryBlockClass, "getCompactedGPUPointer", "()J");
+
+    materialSeed = env->CallLongMethod(noiseGnerationRequest, getMaterialSeedMethod);
+    regionX = env->CallIntMethod(noiseGnerationRequest, getRegionXMethod);
+    regionY = env->CallIntMethod(noiseGnerationRequest, getRegionYMethod);
+    materialMinHeight = env->CallIntMethod(noiseGnerationRequest, getMaterialMinHeightMethod);
+    materialMaxHeight = env->CallIntMethod(noiseGnerationRequest, getMaterialMaxHeightMethod);
+    heightOffset = env->CallIntMethod(noiseGnerationRequest, getMaterialHeightOffset);
+    blobSize = env->CallFloatMethod(noiseGnerationRequest, getBlobSizeMethod);
+    regionXPtr = env->CallLongMethod(gpuMemoryBlock, getxGPUPointerMethod);
+    regionYPtr = env->CallLongMethod(gpuMemoryBlock, getyGPUPointerMethod);
+    regionZPtr = env->CallLongMethod(gpuMemoryBlock, getzGPUPointerMethod);
+    pPtr = env->CallLongMethod(gpuMemoryBlock, getpGPUPointerMethod);
+    outputPtr = env->CallLongMethod(gpuMemoryBlock, getOutputGPUPointerMethod);
+    compactedOutputPtr = env->CallLongMethod(gpuMemoryBlock, getCompactedGPUPointerMethod);
+    jfloatArray chancesArray = (jfloatArray)env->CallObjectMethod(noiseGnerationRequest, getChancesMethod);
     chances = env->GetFloatArrayElements(chancesArray, 0);
 }
 
 
 jobject createResponse(JNIEnv* env, int size, int* output, long long dev_regionXPtr, long long dev_regionYPtr, long long dev_regionZPtr, long long dev_pPtr, long long dev_outputPtr, long long dev_compactedOutputPtr, int totalHeight) {
     jclass noiseHardwareAcceleratorResponseClass = env->FindClass("org/pepsoft/worldpainter/exporting/NoiseHardwareAcceleratorResponse");
+    jclass gpuMemoryBlockClass = env->FindClass("org/pepsoft/worldpainter/exporting/gpuacceleration/GPUMemoryBlock");
 
-    jmethodID constructorMethod = env->GetMethodID(noiseHardwareAcceleratorResponseClass, "<init>", "([IJJJJJJ)V");
+    jmethodID responseConstructorMethod = env->GetMethodID(noiseHardwareAcceleratorResponseClass, "<init>", "([ILorg/pepsoft/worldpainter/exporting/gpuacceleration/GPUMemoryBlock;)V");
+    jmethodID gpuMemoryConstructorMethod = env->GetMethodID(gpuMemoryBlockClass, "<init>", "(JJJJJJ)V");
 
     jintArray result = env->NewIntArray(size);
     env->SetIntArrayRegion(result, 0, size, (jint*)output);
@@ -460,13 +479,13 @@ jobject createResponse(JNIEnv* env, int size, int* output, long long dev_regionX
     jlong outputPtr = (jlong)dev_outputPtr;
     jlong compactedOutputPtr = (jlong)dev_compactedOutputPtr;
 
-    jobject response = env->NewObject(noiseHardwareAcceleratorResponseClass, constructorMethod, result, regionXPtr, regionYPtr, regionZPtr, pPtr, outputPtr,compactedOutputPtr);
+    jobject gpuMemoryBlock = env->NewObject(gpuMemoryBlockClass, gpuMemoryConstructorMethod, regionXPtr, regionYPtr, regionZPtr, pPtr, outputPtr,compactedOutputPtr);
+    jobject response = env->NewObject(noiseHardwareAcceleratorResponseClass, responseConstructorMethod, result, gpuMemoryBlock);
 
     return response;
 }
 
-JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_NoiseHardwareAccelerator_getRegionNoiseData(JNIEnv* env, jclass, jobject request) {
-    auto t_start = std::chrono::high_resolution_clock::now();
+JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_gpuacceleration_ResourceNoiseGenerationRequest_getResourceRegionNoiseData(JNIEnv* env, jobject obj, jobject request) {
     std::clock_t c_start = std::clock();
 
     jlong materialSeed;
@@ -474,6 +493,7 @@ JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_NoiseHardwareA
     jint regionY;
     jint materialMinHeight;
     jint materialMaxHeight;
+    jint heightOffset;
     jlong dev_regionXPtr;
     jlong dev_regionYPtr;
     jlong dev_regionZPtr;
@@ -483,8 +503,9 @@ JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_NoiseHardwareA
     int* outputArray;
     float* chances;
     int outputSize;
+    float blobSize;
 
-    getDataFromRequest(env, request, materialSeed, regionX, regionY, materialMinHeight, materialMaxHeight, dev_regionXPtr, dev_regionYPtr, dev_regionZPtr, dev_pPtr, dev_outputPtr, dev_compactedOutputPtr, outputArray, chances);
+    getDataFromRequest(env, request, materialSeed, regionX, regionY, materialMinHeight, materialMaxHeight,heightOffset, blobSize, dev_regionXPtr, dev_regionYPtr, dev_regionZPtr, dev_pPtr, dev_outputPtr, dev_compactedOutputPtr, outputArray, chances);
 
 
     const int totalHeight = materialMaxHeight - materialMinHeight;
@@ -495,7 +516,8 @@ JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_NoiseHardwareA
     int p[512];
     //[TILE_SIZE * TILES_PER_REGION_AXIS] [TILE_SIZE * TILES_PER_REGION_AXIS] [totalHeight]
     regionArrayZ = new float[totalHeight];
-    getRegionArray(regionArrayX, regionArrayY, regionArrayZ, materialMaxHeight, materialMinHeight, regionX, regionY);
+
+    getRegionArray(regionArrayX, regionArrayY, regionArrayZ, materialMinHeight, materialMaxHeight, regionX, regionY,blobSize,heightOffset);
 
 
     getPArray(p, env, materialSeed);
@@ -512,8 +534,7 @@ JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_NoiseHardwareA
         return NULL;
     }
 
-    std::clock_t c_end = std::clock();
-    double time_elapsed_ms = 1000.0 * (c_end - c_start) / CLOCKS_PER_SEC;
+    
     //printf("Clocktime: %lf\n", time_elapsed_ms);
 
     // cudaDeviceReset must be called before exiting in order for profiling and
@@ -528,8 +549,9 @@ JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_NoiseHardwareA
    
     delete[] regionArrayZ;
 
-    auto t_end = std::chrono::high_resolution_clock::now();
-    auto elapsed_time_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
-    //printf("Finished in: %f Clocktime: %lf\n\n", elapsed_time_ms,time_elapsed_ms);
+    std::clock_t c_end = std::clock();
+    double time_elapsed_ms = 1000.0 * (c_end - c_start) / CLOCKS_PER_SEC;
+    if (DEBUGGING) printf("Finished in: %f Clocktime: %lf\n\n", time_elapsed_ms);
+    
     return result;
 }

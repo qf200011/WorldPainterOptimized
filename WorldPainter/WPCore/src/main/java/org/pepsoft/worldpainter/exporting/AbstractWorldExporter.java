@@ -10,6 +10,7 @@ import org.pepsoft.util.undo.UndoManager;
 import org.pepsoft.worldpainter.Dimension;
 import org.pepsoft.worldpainter.Dimension.Anchor;
 import org.pepsoft.worldpainter.*;
+import org.pepsoft.worldpainter.exporting.gpuacceleration.GPUOptimizable;
 import org.pepsoft.worldpainter.gardenofeden.GardenExporter;
 import org.pepsoft.worldpainter.gardenofeden.Seed;
 import org.pepsoft.worldpainter.layers.*;
@@ -233,12 +234,9 @@ public abstract class AbstractWorldExporter implements WorldExporter {
             final ParallelProgressManager parallelProgressManager = (progressReceiver != null) ? new ParallelProgressManager(progressReceiver, regions.size()) : null;
             final AtomicBoolean abort = new AtomicBoolean();
             final NoiseHardwareAccelerator noiseHardwareAccelerator = NoiseHardwareAccelerator.getInstance();
-            NoiseHardwareAccelerator.getInstance();
-            //NoiseHardwareAccelerator.getRegionNoiseData(0,0);
             try {
                 // Export each individual region
                 for (Point region: sortedRegions) {
-                    final ExecutorService gpuExecutor = createGPUExecutorService("calculating", 1);
                     final Point regionCoords = region;
                     executor.execute(() -> {
                         if (abort.get()) {
@@ -571,6 +569,19 @@ public abstract class AbstractWorldExporter implements WorldExporter {
                 }
             }
         }
+
+        if (NoiseHardwareAccelerator.isGPUEnabled) {
+            for (Layer layer : exporters.keySet()) {
+                LayerExporter exporter = exporters.get(layer);
+                if (exporter instanceof FirstPassLayerExporter) {
+                    if (exporter instanceof GPUOptimizable) {
+                        ((GPUOptimizable) exporter).renderAll(minecraftWorld, tiles, regionCoords);
+                    }
+                }
+            }
+        }
+
+
         if (logger.isDebugEnabled()) {
             logger.debug("End of first pass for region {},{}", regionCoords.x, regionCoords.y);
         }
@@ -800,6 +811,18 @@ public abstract class AbstractWorldExporter implements WorldExporter {
                     }
                 }
                 Collections.sort(ceilingSecondaryPassLayers);
+            }
+
+            for (Layer layer : exporters.keySet()){
+                LayerExporter exporter= exporters.get(layer);
+                if (!(exporter instanceof FirstPassLayerExporter )){
+                    continue;
+                }
+                if (!(exporter instanceof GPUOptimizable)){
+                    continue;
+                }
+
+                ((GPUOptimizable) exporter).computePerlinNoiseOnGPU(regionCoords,(HashMap<Point, Tile>) tiles);
             }
 
             // First pass. Create terrain and apply layers which don't need access to neighbouring chunks

@@ -9,12 +9,11 @@ import org.pepsoft.minecraft.Chunk;
 import org.pepsoft.minecraft.Material;
 import org.pepsoft.util.PerlinNoise;
 import org.pepsoft.util.Version;
+import org.pepsoft.worldpainter.*;
 import org.pepsoft.worldpainter.Dimension;
-import org.pepsoft.worldpainter.HeightTransform;
-import org.pepsoft.worldpainter.Platform;
-import org.pepsoft.worldpainter.Tile;
 import org.pepsoft.worldpainter.exporting.AbstractLayerExporter;
 import org.pepsoft.worldpainter.exporting.FirstPassLayerExporter;
+import org.pepsoft.worldpainter.exporting.MinecraftWorld;
 import org.pepsoft.worldpainter.exporting.NoiseHardwareAccelerator;
 import org.pepsoft.worldpainter.exporting.gpuacceleration.GPUOptimizable;
 import org.pepsoft.worldpainter.exporting.gpuacceleration.NoiseGenerationRequest;
@@ -55,7 +54,10 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
             }
         }
         this.threadAndProcessToNoiseIndexesMap = new HashMap<>();
+        this.threadToProcessCountMap = new HashMap<>();
         this.activeMaterials = activeMaterials.toArray(new Material[activeMaterials.size()]);
+        this.threadAndProcessToMaterialIdMap = new HashMap<>();
+        this.threadAndProcessToMinHeightMap = new HashMap<>();
         noiseGenerators = new PerlinNoise[this.activeMaterials.length];
         final long[] seedOffsets = new long[this.activeMaterials.length];
         minLevels = new int[this.activeMaterials.length];
@@ -85,10 +87,6 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
         final boolean coverSteepTerrain = dimension.isCoverSteepTerrain(), nether = (dimension.getAnchor().dim == DIM_NETHER);
 
         boolean hasGPUNoise=false;
-        if (NoiseHardwareAccelerator.isGPUEnabled&&regionCoords!=null&&threadAndProcessToNoiseIndexesMap.containsKey(Thread.currentThread().getId())){
-             render((HashMap<Integer, int[]>) threadAndProcessToNoiseIndexesMap.get(Thread.currentThread().getId()),chunk,nether);
-             return;
-        }
 
 
         final int minimumLevel = ((ResourcesExporterSettings) super.settings).getMinimumLevel();
@@ -184,42 +182,53 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
     }
 
     private void render(HashMap<Integer,int[]> materialToCoordMap, Chunk chunk, boolean nether){
+        long threadId = Thread.currentThread().getId();
+        HashMap<Integer,Integer> processIdToMaterialIdMap = (HashMap<Integer, Integer>) threadAndProcessToMaterialIdMap.get(threadId);
         for (int i = 0; i < activeMaterials.length; i++) {
-            if (!materialToCoordMap.containsKey(i)){
-                break;
-            }
-            for (int index:materialToCoordMap.get(i)){
-                int tempIndex=index;
-                int y = index/(512*512)-1-minLevels[i];
-                tempIndex-=y*(512*512);
-                int x=tempIndex%512;
-                int z=tempIndex/512;
-
-                int lowerXBound=chunk.getxPos()*16;
-                int upperXBound=chunk.getxPos()*16+15;
-
-                int lowerZBound=chunk.getzPos()*16;
-                int upperZBound=chunk.getzPos()*16+15;
-
-                if (x<lowerXBound||x>upperXBound){
-                    break;
+            for (int processId : processIdToMaterialIdMap.keySet()) {
+                if (processIdToMaterialIdMap.get(processId)!=i){
+                    continue;
                 }
 
-                if (z<lowerZBound|| z>upperZBound){
-                    break;
+                for (int index : materialToCoordMap.get(processId-1)) {
+                    int tempIndex = index;
+                    int y = index / (512 * 512) + minLevels[i]; //todo this should be accounting for the y array split
+                    tempIndex -= (index / (512 * 512)) * (512 * 512);
+                    int x = tempIndex % 512;
+                    int z = tempIndex / 512;
+
+                    final int xOffsetInTile = (chunk.getxPos() & 7) << 4;
+                    final int zOffsetInTile = (chunk.getzPos() & 7) << 4;
+
+                    int lowerXBound = xOffsetInTile;
+                    int upperXBound = lowerXBound + 15;
+
+                    int lowerZBound = zOffsetInTile;
+                    int upperZBound = lowerZBound + 15;
+
+                    if (x < lowerXBound || x > upperXBound) {
+                        continue;
+                    }
+
+                    if (z < lowerZBound || z > upperZBound) {
+                        continue;
+                    }
+
+                    final Material existingMaterial = chunk.getMaterial(x, y, z);
+                    if (existingMaterial.isNamed(MC_DEEPSLATE) && ORE_TO_DEEPSLATE_VARIANT.containsKey(activeMaterials[i].name)) {
+                        chunk.setMaterial(x, y, z, ORE_TO_DEEPSLATE_VARIANT.get(activeMaterials[i].name));
+                    } else if (nether && (activeMaterials[i].isNamed(MC_GOLD_ORE))) {
+                        chunk.setMaterial(x, y, z, NETHER_GOLD_ORE);
+                    } else {
+                        chunk.setMaterial(x, y, z, activeMaterials[i]);
+                    }
                 }
 
-                final Material existingMaterial = chunk.getMaterial(x, y, z);
-                if (existingMaterial.isNamed(MC_DEEPSLATE) && ORE_TO_DEEPSLATE_VARIANT.containsKey(activeMaterials[i].name)) {
-                    chunk.setMaterial(x, y, z, ORE_TO_DEEPSLATE_VARIANT.get(activeMaterials[i].name));
-                } else if (nether && (activeMaterials[i].isNamed(MC_GOLD_ORE))) {
-                    chunk.setMaterial(x, y, z, NETHER_GOLD_ORE);
-                } else {
-                    chunk.setMaterial(x, y, z, activeMaterials[i]);
-                }
-                break;
+/*                processIdToMaterialIdMap.remove(processId);*/
             }
         }
+
+        /*threadAndProcessToMaterialIdMap.remove(threadId);*/
     }
 
 //  TODO: resource frequenties onderzoeken met Statistics tool!
@@ -230,6 +239,10 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
     public final int[] minLevels, maxLevels;
     private final float[][] chances;
     private final Map<Long,Map<Integer,int[]>> threadAndProcessToNoiseIndexesMap;
+    private final Map<Long,Map<Integer,Integer>> threadAndProcessToMaterialIdMap;
+
+    private final Map<Long, Integer> threadToProcessCountMap;
+    private final Map<Long,HashMap<Integer,Integer>> threadAndProcessToMinHeightMap;
 
     private static final Map<String, Material> ORE_TO_DEEPSLATE_VARIANT = ImmutableMap.of(
             MC_COAL_ORE, DEEPSLATE_COAL_ORE,
@@ -242,12 +255,28 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
             MC_EMERALD_ORE, DEEPSLATE_EMERALD_ORE
     );
 
-    private String getUniqueKeyForNoiseMap(long threadId, int processId){
-        return threadId+"-"+processId;
-    }
-
     @Override
-    public void computePerlinNoiseOnGPU(Point region) {
+    public void computePerlinNoiseOnGPU(Point region, HashMap<Point,Tile> tileCoordsToTiles ) {
+
+        int maxRegionHeight =Integer.MIN_VALUE;
+        for (Point tileCoord: tileCoordsToTiles.keySet()){
+            Tile tile = tileCoordsToTiles.get(tileCoord);
+            for(int x=0; x<TILE_SIZE; x++){
+                for(int y=0; y<TILE_SIZE; y++){
+                    int height = tile.getIntHeight(x,y);
+                    if (height>maxRegionHeight){
+                        maxRegionHeight=height;
+                    }
+                }
+            }
+        }
+
+
+        int maxSubSurfaceHeight= maxRegionHeight-dimension.getTopLayerMinDepth();
+
+
+        int processId=0;
+        long threadId=Thread.currentThread().getId();
         for (int materialIndex=0;materialIndex<activeMaterials.length; materialIndex++){
             final float blobSize;
             if (activeMaterials[materialIndex].isNamedOneOf(MC_DIRT, MC_GRAVEL)){
@@ -259,15 +288,29 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
             final long seed = noiseGenerators[materialIndex].getSeed();
 
             int minMaterialHeight = minLevels[materialIndex];
-            int maxMaterialHeight = maxLevels[materialIndex];
+            int maxMaterialHeight = Math.min(maxLevels[materialIndex],maxSubSurfaceHeight);
             int heightSize = NoiseGenerationRequest.HEIGHT_SIZE;
 
             for (int startingHeight=minMaterialHeight; startingHeight<=maxMaterialHeight; startingHeight=startingHeight+heightSize) { //todo, including max?
-                ResourceNoiseGenerationRequest resourceNoiseHardwareAcceleratorRequest = new ResourceNoiseGenerationRequest(seed,region.x,region.y,startingHeight,blobSize,this,chances[materialIndex]);
-                long threadId=Thread.currentThread().getId();
-                NoiseHardwareAccelerator.getInstance().addGPURequestToQueue(threadId,materialIndex,resourceNoiseHardwareAcceleratorRequest); //use materialIndex since it's unique per thread.
+                int maxHeight=Math.min(startingHeight+heightSize,maxMaterialHeight);
+                ResourceNoiseGenerationRequest resourceNoiseHardwareAcceleratorRequest = new ResourceNoiseGenerationRequest(seed,region.x,region.y,startingHeight,maxHeight,startingHeight-minMaterialHeight,blobSize,this,chances[materialIndex]);
+
+                NoiseHardwareAccelerator.getInstance().addGPURequestToQueue(threadId,processId,resourceNoiseHardwareAcceleratorRequest);
+                processId++;
+
+                if (! threadAndProcessToMaterialIdMap.containsKey(threadId)){
+                    threadAndProcessToMaterialIdMap.put(threadId,new HashMap<>());
+                }
+
+                if (! threadAndProcessToMinHeightMap.containsKey(threadId)){
+                    threadAndProcessToMinHeightMap.put(threadId,new HashMap<>());
+                }
+
+                threadAndProcessToMaterialIdMap.get(threadId).put(processId, materialIndex);
+                threadAndProcessToMinHeightMap.get(threadId).put(processId, startingHeight);
             }
         }
+        threadToProcessCountMap.put(threadId,processId);
     }
 
     @Override
@@ -277,6 +320,77 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
         }
 
         threadAndProcessToNoiseIndexesMap.get(threadId).put(processId,outputIndexes);
+    }
+
+    @Override
+    public void renderAll(MinecraftWorld world, Map<Point, Tile> tiles, Point regionCoords) {
+        boolean nether = (dimension.getAnchor().dim == DIM_NETHER);
+        final long threadId = Thread.currentThread().getId();
+
+        while (threadAndProcessToNoiseIndexesMap.get(threadId)==null||threadAndProcessToNoiseIndexesMap.get(threadId).size()!=threadToProcessCountMap.get(threadId)){
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+                HashMap<Integer,int[]> processToNoiseMap = (HashMap<Integer, int[]>) threadAndProcessToNoiseIndexesMap.get(threadId);
+        for (int processId : processToNoiseMap.keySet()){
+            int materialIndex=threadAndProcessToMaterialIdMap.get(threadId).get(processId+1);
+            final int heightOffset = threadAndProcessToMinHeightMap.get(threadId).get(processId+1);
+            for (int index: processToNoiseMap.get(processId)){
+                int tempIndex = index;
+                int y = index / (512 * 512) + heightOffset; //todo this should be accounting for the y array split
+                tempIndex -= (index / (512 * 512)) * (512 * 512);
+                int x = tempIndex % 512;
+                int z = tempIndex / 512;
+
+                int chunkX=x/16;
+                int chunkZ=z/16;
+
+                int worldChunkX=regionCoords.x*32+chunkX;
+                int worldChunkZ = regionCoords.y*32+chunkZ;
+
+                int tileX=x/128;
+                int tileY=z/128;
+
+                int tileXOffset=regionCoords.x*4;
+                int tileYOffset=regionCoords.y*4;
+
+                Chunk chunk = world.getChunk(worldChunkX, worldChunkZ);
+                Tile tile = tiles.get(new Point(tileX+tileXOffset,tileY+tileYOffset));
+
+                if (chunk==null){
+                    continue;
+                }
+
+                int localX=x%16;
+                int localZ=z%16;
+
+                int worldX=tile.getX() * TILE_SIZE + localX;
+                int worldY=tile.getY() * TILE_SIZE + localZ;
+
+                final int terrainHeight = tile.getIntHeight(x%128, z%128);
+                final int topLayerDepth = dimension.getTopLayerDepth(worldX, worldY, terrainHeight);
+                int subsurfaceMaxHeight = terrainHeight - topLayerDepth;
+
+                if (y>subsurfaceMaxHeight){
+                    continue;
+                }
+
+
+                final Material existingMaterial = chunk.getMaterial(localX, y, localZ);
+                if (existingMaterial.isNamed(MC_DEEPSLATE) && ORE_TO_DEEPSLATE_VARIANT.containsKey(activeMaterials[materialIndex].name)) {
+                    chunk.setMaterial(localX, y, localZ, ORE_TO_DEEPSLATE_VARIANT.get(activeMaterials[materialIndex].name));
+                } else if (nether && (activeMaterials[materialIndex].isNamed(MC_GOLD_ORE))) {
+                    chunk.setMaterial(localX, y, localZ, NETHER_GOLD_ORE);
+                } else {
+                    chunk.setMaterial(localX, y, localZ, activeMaterials[materialIndex]);
+                }
+            }
+        }
+
     }
 
     public static class ResourcesExporterSettings implements ExporterSettings {

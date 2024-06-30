@@ -30,6 +30,10 @@ public final class NoiseHardwareAccelerator {
         gpuMemoryController =new GPUMemoryController();
         noiseRequestQueue = new ConcurrentLinkedQueue<>();
         gpuExecutorService=createGPUExecutorService("Calculating Noise",GPU_MEMORY_ALLOCATIONS);
+
+        if (isGPUEnabled) {
+            startGPUThreadPool();
+        }
     }
 
     private ExecutorService createGPUExecutorService(String operation, int jobCount){
@@ -47,30 +51,31 @@ public final class NoiseHardwareAccelerator {
     }
 
 
-    private class GPUNoiseRequest{
+    public class GPUNoiseRequest{
         private final NoiseGenerationRequest noiseGenerationRequest;
         private final GPUMemoryBlock gpuMemoryBlock;
         private final long threadId;
         private final int processId;
 
-        public GPUNoiseRequest(NoiseGenerationRequest noiseGenerationRequest, GPUMemoryBlock gpuMemoryBlock, long threadId, int processId) {
+        private GPUNoiseRequest(NoiseGenerationRequest noiseGenerationRequest, GPUMemoryBlock gpuMemoryBlock, long threadId, int processId) {
             this.noiseGenerationRequest = noiseGenerationRequest;
             this.gpuMemoryBlock = gpuMemoryBlock;
-            this.threadId=processId;
+            this.threadId=threadId;
             this.processId=processId;
         }
 
-        public void execute(){
-            NoiseHardwareAcceleratorResponse noiseHardwareAcceleratorResponse= this.noiseGenerationRequest.getRegionNoiseData();
+        private NoiseHardwareAcceleratorResponse execute(){
+            NoiseHardwareAcceleratorResponse noiseHardwareAcceleratorResponse= this.noiseGenerationRequest.getRegionNoiseData(this);
             int[] outputIndexes = noiseHardwareAcceleratorResponse.getOutput();
             this.noiseGenerationRequest.executeCallback(threadId,processId,outputIndexes);
+            return noiseHardwareAcceleratorResponse;
         }
 
-        public int getProcessId() {
+        private int getProcessId() {
             return processId;
         }
 
-        public long getThreadId() {
+        private long getThreadId() {
             return threadId;
         }
 
@@ -265,6 +270,10 @@ public final class NoiseHardwareAccelerator {
                 return false;
             }
 
+            int memoryIndex=getMemoryIndex(threadId,processId);
+
+            isMemoryAvailableArray.set(memoryIndex,true);
+
             processToMemoryIndexMap.remove(uniqueProcessMapKey);
             return true;
         }
@@ -297,28 +306,36 @@ public final class NoiseHardwareAccelerator {
     }
 
     public void startGPUThreadPool(){
-        while (!gpuExecutorService.isShutdown()){
-            gpuExecutorService.execute(() ->{
-                GPUNoiseRequest gpuNoiseRequest = tryGetFirstGPUNoiseRequest();
-                if (gpuNoiseRequest==null){
-                    try {
-                        Thread.sleep(100);
-                        return;
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-                gpuNoiseRequest.execute();
 
-                long threadId = gpuNoiseRequest.getThreadId();
-                int processId = gpuNoiseRequest.getProcessId();
-                gpuMemoryController.unreserveGPUMemorySpace(threadId,processId);
+        for (int i=0; i<GPU_MEMORY_ALLOCATIONS; i++){
+            gpuExecutorService.execute(() ->{
+                while (!gpuExecutorService.isShutdown()){
+                    GPUNoiseRequest gpuNoiseRequest = tryGetFirstGPUNoiseRequest();
+                    if (gpuNoiseRequest==null){
+                        try {
+                            Thread.sleep(1000);
+                            continue;
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+
+                    long threadId = gpuNoiseRequest.getThreadId();
+                    int processId = gpuNoiseRequest.getProcessId();
+                    gpuMemoryController.setGPUMemoryPointersFromResponse(threadId, processId, gpuNoiseRequest.execute());
+                    gpuMemoryController.unreserveGPUMemorySpace(threadId,processId);
+                }
             });
         }
+
     }
 
     private synchronized GPUNoiseRequest tryGetFirstGPUNoiseRequest(){
         NoiseRequestQueueEntry noiseRequestQueueEntry = noiseRequestQueue.peek();
+        if (noiseRequestQueueEntry==null) {
+            return null;
+        }
+
         long threadId = noiseRequestQueueEntry.getThreadId();
         int processId = noiseRequestQueueEntry.getProcessId();
         if (!gpuMemoryController.reserveGPUMemorySpace(threadId,processId)){
@@ -352,5 +369,5 @@ public final class NoiseHardwareAccelerator {
      * /todo make this a setting in the ui. it would likely be a variable for how much vram to use and would have an automatic option similiar to cpu threads.
      * todo probably good to determine how many allocations a cpu thread needs instead of maxing the memory.
      */
-    private final  static int GPU_MEMORY_ALLOCATIONS =4;
+    private final  static int GPU_MEMORY_ALLOCATIONS =10;
 }
