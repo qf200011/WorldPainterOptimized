@@ -51,7 +51,7 @@ __global__ void generateNoise(int* p, float* chances, float* regionArrayX, float
         printf("(%d + %d  * %d ) + (%d  * %d )", blockIdx.x, blockIdx.y, Y_ARRAY_SIZE, threadIdx.x, Z_ARRAY_SIZE);
     }*/
 
-    float outputNoise = getPerlinNoiseAt(regionArrayX[blockIdx.x], regionArrayZ[threadIdx.x], regionArrayY[blockIdx.y], p);
+    float outputNoise = getPerlinNoiseAt(regionArrayX[blockIdx.x], regionArrayY[blockIdx.y], regionArrayZ[threadIdx.x], p);
 
     bool shouldSetMaterial = outputNoise >= chances[8];
 
