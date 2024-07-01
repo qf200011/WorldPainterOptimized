@@ -336,58 +336,66 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
         }
 
                 HashMap<Integer,int[]> processToNoiseMap = (HashMap<Integer, int[]>) threadAndProcessToNoiseIndexesMap.get(threadId);
-        for (int processId : processToNoiseMap.keySet()){
-            int materialIndex=threadAndProcessToMaterialIdMap.get(threadId).get(processId+1);
-            final int heightOffset = threadAndProcessToMinHeightMap.get(threadId).get(processId+1);
-            for (int index: processToNoiseMap.get(processId)){
-                int tempIndex = index;
-                int y = index / (512 * 512) + heightOffset; //todo this should be accounting for the y array split
-                tempIndex -= (index / (512 * 512)) * (512 * 512);
-                int x = tempIndex % 512;
-                int z = tempIndex / 512;
 
-                int chunkX=x/16;
-                int chunkZ=z/16;
-
-                int worldChunkX=regionCoords.x*32+chunkX;
-                int worldChunkZ = regionCoords.y*32+chunkZ;
-
-                int tileX=x/128;
-                int tileY=z/128;
-
-                int tileXOffset=regionCoords.x*4;
-                int tileYOffset=regionCoords.y*4;
-
-                Chunk chunk = world.getChunk(worldChunkX, worldChunkZ);
-                Tile tile = tiles.get(new Point(tileX+tileXOffset,tileY+tileYOffset));
-
-                if (chunk==null){
+        for (int materialIndex=activeMaterials.length; materialIndex>0; materialIndex--){
+            for (int processId : processToNoiseMap.keySet()){
+                int processMaterialIndex=threadAndProcessToMaterialIdMap.get(threadId).get(processId+1);
+                if (processMaterialIndex!=materialIndex){
                     continue;
                 }
 
-                int localX=x%16;
-                int localZ=z%16;
+                final int heightOffset = threadAndProcessToMinHeightMap.get(threadId).get(processId+1);
+                for (int index: processToNoiseMap.get(processId)){
+                    int tempIndex = index;
+                    int y = index / (512 * 512) + heightOffset; //todo this should be accounting for the y array split
+                    tempIndex -= (index / (512 * 512)) * (512 * 512);
+                    int x = tempIndex % 512;
+                    int z = tempIndex / 512;
 
-                int worldX=tile.getX() * TILE_SIZE + localX;
-                int worldY=tile.getY() * TILE_SIZE + localZ;
+                    int chunkX=x/16;
+                    int chunkZ=z/16;
 
-                final int terrainHeight = tile.getIntHeight(x%128, z%128);
-                final int topLayerDepth = dimension.getTopLayerDepth(worldX, worldY, terrainHeight);
-                int subsurfaceMaxHeight = terrainHeight - topLayerDepth;
+                    int worldChunkX=regionCoords.x*32+chunkX;
+                    int worldChunkZ = regionCoords.y*32+chunkZ;
 
-                if (y>subsurfaceMaxHeight){
-                    continue;
+                    int tileX=x/128;
+                    int tileY=z/128;
+
+                    int tileXOffset=regionCoords.x*4;
+                    int tileYOffset=regionCoords.y*4;
+
+                    Chunk chunk = world.getChunk(worldChunkX, worldChunkZ);
+                    Tile tile = tiles.get(new Point(tileX+tileXOffset,tileY+tileYOffset));
+
+                    if (chunk==null){
+                        continue;
+                    }
+
+                    int localX=x%16;
+                    int localZ=z%16;
+
+                    int worldX=tile.getX() * TILE_SIZE + localX;
+                    int worldY=tile.getY() * TILE_SIZE + localZ;
+
+                    final int terrainHeight = tile.getIntHeight(x%128, z%128);
+                    final int topLayerDepth = dimension.getTopLayerDepth(worldX, worldY, terrainHeight);
+                    int subsurfaceMaxHeight = terrainHeight - topLayerDepth;
+
+                    if (y>subsurfaceMaxHeight){
+                        continue;
+                    }
+
+
+                    final Material existingMaterial = chunk.getMaterial(localX, y, localZ);
+                    if (existingMaterial.isNamed(MC_DEEPSLATE) && ORE_TO_DEEPSLATE_VARIANT.containsKey(activeMaterials[materialIndex].name)) {
+                        chunk.setMaterial(localX, y, localZ, ORE_TO_DEEPSLATE_VARIANT.get(activeMaterials[materialIndex].name));
+                    } else if (nether && (activeMaterials[materialIndex].isNamed(MC_GOLD_ORE))) {
+                        chunk.setMaterial(localX, y, localZ, NETHER_GOLD_ORE);
+                    } else {
+                        chunk.setMaterial(localX, y, localZ, activeMaterials[materialIndex]);
+                    }
                 }
 
-
-                final Material existingMaterial = chunk.getMaterial(localX, y, localZ);
-                if (existingMaterial.isNamed(MC_DEEPSLATE) && ORE_TO_DEEPSLATE_VARIANT.containsKey(activeMaterials[materialIndex].name)) {
-                    chunk.setMaterial(localX, y, localZ, ORE_TO_DEEPSLATE_VARIANT.get(activeMaterials[materialIndex].name));
-                } else if (nether && (activeMaterials[materialIndex].isNamed(MC_GOLD_ORE))) {
-                    chunk.setMaterial(localX, y, localZ, NETHER_GOLD_ORE);
-                } else {
-                    chunk.setMaterial(localX, y, localZ, activeMaterials[materialIndex]);
-                }
             }
         }
 
