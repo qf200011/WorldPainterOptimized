@@ -15,18 +15,18 @@ public abstract class NoiseGenerationRequest {
     private final int maxHeight;
     private final float blobSize;
 
-    private final GPUOptimizable gpuOptimizable;
+    private final GPUOptimizableExporter gpuOptimizableExporter;
 
     public static final int HEIGHT_SIZE=32;
 
 
-    public NoiseGenerationRequest( int regionX, int regionY, int minHeight, int maxHeight, float blobSize, GPUOptimizable gpuOptimizable) {
+    public NoiseGenerationRequest( int regionX, int regionY, int minHeight, int maxHeight, float blobSize, GPUOptimizableExporter gpuOptimizableExporter) {
         this.regionX = regionX;
         this.regionY = regionY;
         this.minHeight = minHeight;
         this.maxHeight = maxHeight;
         this.blobSize=blobSize;
-        this.gpuOptimizable=gpuOptimizable;
+        this.gpuOptimizableExporter = gpuOptimizableExporter;
     }
 
     public abstract NoiseHardwareAcceleratorResponse getRegionNoiseData(NoiseHardwareAccelerator.GPUNoiseRequest request);
@@ -52,6 +52,6 @@ public abstract class NoiseGenerationRequest {
     }
 
     public void executeCallback(long threadId, int processId, int[] outputIndexes){
-        gpuOptimizable.computeCallBack(threadId,processId,outputIndexes);
+        gpuOptimizableExporter.computeCallBack(threadId,processId,outputIndexes);
     }
 }

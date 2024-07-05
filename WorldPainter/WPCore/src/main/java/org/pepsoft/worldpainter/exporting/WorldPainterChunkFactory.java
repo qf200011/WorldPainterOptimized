@@ -11,7 +11,7 @@ import org.pepsoft.minecraft.Material;
 import org.pepsoft.util.PerlinNoise;
 import org.pepsoft.worldpainter.*;
 import org.pepsoft.worldpainter.Dimension;
-import org.pepsoft.worldpainter.exporting.gpuacceleration.GPUOptimizable;
+import org.pepsoft.worldpainter.exporting.gpuacceleration.GPUOptimizableExporter;
 import org.pepsoft.worldpainter.layers.*;
 import org.pepsoft.worldpainter.objects.WPObject;
 import org.pepsoft.worldpainter.plugins.BlockBasedPlatformProvider;
@@ -226,7 +226,7 @@ public class WorldPainterChunkFactory implements ChunkFactory {
         for (Layer layer: tile.getLayers(minimumLayers)) {
             LayerExporter layerExporter = exporters.get(layer);
             if (layerExporter instanceof FirstPassLayerExporter) {
-                if (NoiseHardwareAccelerator.isGPUEnabled&& layerExporter instanceof GPUOptimizable){
+                if (NoiseHardwareAccelerator.isGPUEnabled&& layerExporter instanceof GPUOptimizableExporter){
                     continue;
                 }
                 if (logger.isTraceEnabled()) {

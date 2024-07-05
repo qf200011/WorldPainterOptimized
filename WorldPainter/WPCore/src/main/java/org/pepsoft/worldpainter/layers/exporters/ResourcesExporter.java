@@ -15,7 +15,7 @@ import org.pepsoft.worldpainter.exporting.AbstractLayerExporter;
 import org.pepsoft.worldpainter.exporting.FirstPassLayerExporter;
 import org.pepsoft.worldpainter.exporting.MinecraftWorld;
 import org.pepsoft.worldpainter.exporting.NoiseHardwareAccelerator;
-import org.pepsoft.worldpainter.exporting.gpuacceleration.GPUOptimizable;
+import org.pepsoft.worldpainter.exporting.gpuacceleration.GPUOptimizableExporter;
 import org.pepsoft.worldpainter.exporting.gpuacceleration.NoiseGenerationRequest;
 import org.pepsoft.worldpainter.exporting.gpuacceleration.ResourceNoiseGenerationRequest;
 import org.pepsoft.worldpainter.layers.Resources;
@@ -42,7 +42,7 @@ import static org.pepsoft.worldpainter.layers.exporters.ResourcesExporter.Resour
  *
  * @author pepijn
  */
-public class ResourcesExporter extends AbstractLayerExporter<Resources> implements FirstPassLayerExporter, GPUOptimizable {
+public class ResourcesExporter extends AbstractLayerExporter<Resources> implements FirstPassLayerExporter, GPUOptimizableExporter {
     public ResourcesExporter(Dimension dimension, Platform platform, ExporterSettings settings) {
         super(dimension, platform, (settings != null) ? settings : defaultSettings(platform, dimension.getAnchor(), dimension.getMinHeight(), dimension.getMaxHeight()), Resources.INSTANCE);
         final ResourcesExporterSettings resourcesSettings = (ResourcesExporterSettings) super.settings;
@@ -399,6 +399,10 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
             }
         }
 
+        threadAndProcessToNoiseIndexesMap.remove(threadId);
+        threadAndProcessToMinHeightMap.remove(threadId);
+        threadToProcessCountMap.remove(threadId);
+        threadAndProcessToMaterialIdMap.remove(threadId);
     }
 
     public static class ResourcesExporterSettings implements ExporterSettings {

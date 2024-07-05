@@ -7,8 +7,8 @@ public class ResourceNoiseGenerationRequest extends NoiseGenerationRequest {
     private final float[] chances;
     private final long seed;
 
-    public ResourceNoiseGenerationRequest(long seed, int regionX, int regionY, int minHeight,int maxHeight, float blobSize,GPUOptimizable gpuOptimizable, float[] chances) {
-        super(regionX, regionY, minHeight, maxHeight, blobSize, gpuOptimizable);
+    public ResourceNoiseGenerationRequest(long seed, int regionX, int regionY, int minHeight, int maxHeight, float blobSize, GPUOptimizableExporter gpuOptimizableExporter, float[] chances) {
+        super(regionX, regionY, minHeight, maxHeight, blobSize, gpuOptimizableExporter);
         this.chances = chances;
         this.seed=seed;
     }

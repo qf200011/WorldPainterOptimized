@@ -10,11 +10,10 @@ import org.pepsoft.util.undo.UndoManager;
 import org.pepsoft.worldpainter.Dimension;
 import org.pepsoft.worldpainter.Dimension.Anchor;
 import org.pepsoft.worldpainter.*;
-import org.pepsoft.worldpainter.exporting.gpuacceleration.GPUOptimizable;
+import org.pepsoft.worldpainter.exporting.gpuacceleration.GPUOptimizableExporter;
 import org.pepsoft.worldpainter.gardenofeden.GardenExporter;
 import org.pepsoft.worldpainter.gardenofeden.Seed;
 import org.pepsoft.worldpainter.layers.*;
-import org.pepsoft.worldpainter.layers.exporters.ResourcesExporter;
 import org.pepsoft.worldpainter.layers.pockets.UndergroundPocketsLayer;
 import org.pepsoft.worldpainter.layers.tunnel.TunnelLayer;
 import org.pepsoft.worldpainter.platforms.JavaExportSettings;
@@ -30,8 +29,6 @@ import java.io.File;
 import java.io.IOException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.*;
 import java.util.Map.Entry;
@@ -574,8 +571,8 @@ public abstract class AbstractWorldExporter implements WorldExporter {
             for (Layer layer : exporters.keySet()) {
                 LayerExporter exporter = exporters.get(layer);
                 if (exporter instanceof FirstPassLayerExporter) {
-                    if (exporter instanceof GPUOptimizable) {
-                        ((GPUOptimizable) exporter).renderAll(minecraftWorld, tiles, regionCoords);
+                    if (exporter instanceof GPUOptimizableExporter) {
+                        ((GPUOptimizableExporter) exporter).renderAll(minecraftWorld, tiles, regionCoords);
                     }
                 }
             }
@@ -818,11 +815,11 @@ public abstract class AbstractWorldExporter implements WorldExporter {
                 if (!(exporter instanceof FirstPassLayerExporter )){
                     continue;
                 }
-                if (!(exporter instanceof GPUOptimizable)){
+                if (!(exporter instanceof GPUOptimizableExporter)){
                     continue;
                 }
 
-                ((GPUOptimizable) exporter).computePerlinNoiseOnGPU(regionCoords,(HashMap<Point, Tile>) tiles);
+                ((GPUOptimizableExporter) exporter).computePerlinNoiseOnGPU(regionCoords,(HashMap<Point, Tile>) tiles);
             }
 
             // First pass. Create terrain and apply layers which don't need access to neighbouring chunks
