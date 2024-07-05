@@ -8,7 +8,7 @@ private:
 	jmethodID nextIntMethod;
 
 public:
-	JavaRandom(JNIEnv* env, long seed);
+	JavaRandom(JNIEnv* env, long long seed);
 
 	int nextInt(int bound);
 };

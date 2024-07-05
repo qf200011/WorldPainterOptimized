@@ -1,6 +1,6 @@
 #include "JavaRandom.h"
 
-JavaRandom::JavaRandom(JNIEnv* env, long seed) : JavaWrapper(env, "java/util/Random") {
+JavaRandom::JavaRandom(JNIEnv* env, long long seed) : JavaWrapper(env, "java/util/Random") {
 
 	randomSeededConstructorMethod = env->GetMethodID(javaClass, "<init>", "(J)V");
 	nextIntMethod = env->GetMethodID(javaClass, "nextInt", "(I)I");

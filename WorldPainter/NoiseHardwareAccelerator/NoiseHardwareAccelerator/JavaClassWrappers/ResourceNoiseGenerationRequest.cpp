@@ -10,6 +10,6 @@ float* ResourceNoiseGenerationRequest::getChances() {
 	return env->GetFloatArrayElements(chancesArray, 0);
 }
 
-long ResourceNoiseGenerationRequest::getSeed() {
+long long ResourceNoiseGenerationRequest::getSeed() {
 	return env->CallLongMethod(javaObject, getSeedMethod);
 }

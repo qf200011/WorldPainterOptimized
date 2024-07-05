@@ -13,5 +13,5 @@ public:
 	ResourceNoiseGenerationRequest(JNIEnv* env, jobject resourceNoiseGenerationRequestObject);
 
 	float* getChances();
-	long getSeed();
+	long long getSeed();
 };
