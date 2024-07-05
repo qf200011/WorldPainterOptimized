@@ -13,8 +13,6 @@
 #include <stdio.h>
 #include <ctime>
 
-
-#define TINY_BLOBS 4.099f
 #define TILE_SIZE 128
 #define REGION_SIZE 512
 #define CHUNK_SIZE 16
@@ -36,79 +34,12 @@ void freeCudaMemory(int* dev_p, float* dev_regionArrayX, float* dev_regionArrayY
 
 __global__ void generateNoise(int* p, float* chances, float* regionArrayX, float* regionArrayY, float* regionArrayZ, bool *output, int totalHeight)
 {
-    /*int x=128;
-    int y=128;
-    int z=64+61;
-    printf("P is %d\n", p[131]);
-    output[x+ y*Y_ARRAY_SIZE + z* Z_ARRAY_SIZE]= getPerlinNoiseAt(regionArrayX[x], regionArrayY[y], regionArrayZ[z], p);*/
-
-    /*if (blockIdx.x == 128 && blockIdx.y == 128 && threadIdx.x == 125) {
-        printf("Special value: %f in spot %d\n", getPerlinNoiseAt(regionArrayX[blockIdx.x], regionArrayY[blockIdx.y], regionArrayZ[threadIdx.x], p), blockIdx.x + (blockIdx.y * X_ARRAY_SIZE) + (threadIdx.x * X_ARRAY_SIZE * Y_ARRAY_SIZE));
-    }
-
-    if (blockIdx.x + (blockIdx.y * X_ARRAY_SIZE) + (threadIdx.x * X_ARRAY_SIZE * Y_ARRAY_SIZE) == 122432) {
-        printf("I hit the index with X:%d Y:%d Z:%d\n", blockIdx.x, blockIdx.y, threadIdx.x);
-        printf("(%d + %d  * %d ) + (%d  * %d )", blockIdx.x, blockIdx.y, Y_ARRAY_SIZE, threadIdx.x, Z_ARRAY_SIZE);
-    }*/
-
     float outputNoise = getPerlinNoiseAt(regionArrayX[blockIdx.x], regionArrayY[blockIdx.y], regionArrayZ[threadIdx.x], p);
 
     bool shouldSetMaterial = outputNoise >= chances[8];
 
-    /*if (blockIdx.x + (blockIdx.y * X_ARRAY_SIZE) + (threadIdx.x * X_ARRAY_SIZE * X_ARRAY_SIZE)==4426) {
-        printf("X: %f Y: %f Z: %f", regionArrayX[blockIdx.x], regionArrayY[blockIdx.y], regionArrayZ[threadIdx.x]);
-    }*/
-
     output[blockIdx.x + (blockIdx.y * X_ARRAY_SIZE) + (threadIdx.x * X_ARRAY_SIZE * X_ARRAY_SIZE)] = shouldSetMaterial;
 
-}
-
-int main()
-{
-    //float regionArrayX[X_ARRAY_SIZE]; //dx
-    //float regionArrayY[Y_ARRAY_SIZE]; //dy
-    ////float regionArrayZ[Z_ARRAY_SIZE]; //dz but shifted
-    //int p[512];
-    ////float output[X_ARRAY_SIZE * Y_ARRAY_SIZE * Z_ARRAY_SIZE];
-    ////[TILE_SIZE * TILES_PER_REGION_AXIS] [TILE_SIZE * TILES_PER_REGION_AXIS] [totalHeight]
-    ////getRegionArray(regionArrayX, regionArrayY, regionArrayZ, Z_ARRAY_SIZE, 0, 0);
-    ////getPArray(p);
- 
-    ///*for (int i = 0; i < 512; i++) {
-    //    printf("%d: %d\n", i, p[i]);
-    //}*/
-
-    //// Add vectors in parallel.
-
-    ////cudaError_t cudaStatus = noiseWithCuda(p, regionArrayX, regionArrayY, regionArrayZ, output);
-    //if (cudaStatus != cudaSuccess) {
-    //    fprintf(stderr, "addWithCuda failed!");
-    //    delete[] regionArrayX;
-    //    delete[] regionArrayY;
-    //    delete[] regionArrayZ;
-    //    delete[] output;
-    //    delete[] p;
-    //    return 1;
-    //}
-
-    //delete[] regionArrayX;
-    //delete[] regionArrayY;
-    //delete[] regionArrayZ;
-    //delete[] output;
-    //delete[] p;
-    ///*for (int i= 0; i < X_ARRAY_SIZE * Y_ARRAY_SIZE * Z_ARRAY_SIZE; i++) {
-    //    printf("%d: %.6f\n", i, output[i]);
-    //}*/
-
-    //// cudaDeviceReset must be called before exiting in order for profiling and
-    //// tracing tools such as Nsight and Visual Profiler to show complete traces.
-    //cudaStatus = cudaDeviceReset();
-    //if (cudaStatus != cudaSuccess) {
-    //    fprintf(stderr, "cudaDeviceReset failed!");
-    //    return 1;
-    //}
-
-    //return 0;
 }
 
 struct is_true {
@@ -534,17 +465,6 @@ JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_gpuacceleratio
         return NULL;
     }
 
-    
-    //printf("Clocktime: %lf\n", time_elapsed_ms);
-
-    // cudaDeviceReset must be called before exiting in order for profiling and
-    // tracing tools such as Nsight and Visual Profiler to show complete traces.
-    /*cudaStatus = cudaDeviceReset();
-    if (cudaStatus != cudaSuccess) {
-        fprintf(stderr, "cudaDeviceReset failed!");
-        return NULL;
-    }*/
-    
     jobject result = createResponse(env,outputSize, outputArray, dev_regionXPtr, dev_regionYPtr, dev_regionZPtr, dev_pPtr,dev_outputPtr, dev_compactedOutputPtr, totalHeight);
    
     delete[] regionArrayZ;
