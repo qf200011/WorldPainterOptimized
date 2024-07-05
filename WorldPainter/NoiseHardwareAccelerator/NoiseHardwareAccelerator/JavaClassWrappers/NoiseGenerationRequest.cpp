@@ -1,33 +1,31 @@
 #include "NoiseGenerationRequest.h"
 
 NoiseGenerationRequest::NoiseGenerationRequest(JNIEnv* env) {
-	if (noiseGenerationRequest == NULL) {
-		noiseGenerationRequest = env->FindClass("org/pepsoft/worldpainter/exporting/gpuacceleration/NoiseGenerationRequest");
+	noiseRequestClass = env->FindClass("org/pepsoft/worldpainter/exporting/gpuacceleration/NoiseGenerationRequest");
 
-		getRegionXMethod = env->GetMethodID(noiseGenerationRequest, "getRegionX", "()I");
-		getRegionYMethod = env->GetMethodID(noiseGenerationRequest, "getRegionY", "()I");
-		getMaterialMinHeightMethod = env->GetMethodID(noiseGenerationRequest, "getMinHeight", "()I");
-		getMaterialMaxHeightMethod = env->GetMethodID(noiseGenerationRequest, "getMaxHeight", "()I");
-		getBlobSizeMethod = env->GetMethodID(noiseGenerationRequest, "getBlobSize", "()F");
-	}
+	getRegionXMethod = env->GetMethodID(noiseRequestClass, "getRegionX", "()I");
+	getRegionYMethod = env->GetMethodID(noiseRequestClass, "getRegionY", "()I");
+	getMaterialMinHeightMethod = env->GetMethodID(noiseRequestClass, "getMinHeight", "()I");
+	getMaterialMaxHeightMethod = env->GetMethodID(noiseRequestClass, "getMaxHeight", "()I");
+	getBlobSizeMethod = env->GetMethodID(noiseRequestClass, "getBlobSize", "()F");
 }
 
 int NoiseGenerationRequest::getRegionX() {
-	return env->CallIntMethod(noiseGenerationRequest, getRegionXMethod);
+	return env->CallIntMethod(noiseRequestClass, getRegionXMethod);
 }
 
 int NoiseGenerationRequest::getRegionY() {
-	return env->CallIntMethod(noiseGenerationRequest, getRegionYMethod);
+	return env->CallIntMethod(noiseRequestClass, getRegionYMethod);
 }
 
 int NoiseGenerationRequest::getMaterialMinHeight() {
-	return env->CallIntMethod(noiseGenerationRequest, getMaterialMinHeightMethod);
+	return env->CallIntMethod(noiseRequestClass, getMaterialMinHeightMethod);
 }
 
 int NoiseGenerationRequest::getMaterialMaxHeight() {
-	return env->CallIntMethod(noiseGenerationRequest, getMaterialMaxHeightMethod);
+	return env->CallIntMethod(noiseRequestClass, getMaterialMaxHeightMethod);
 } 
 
 int NoiseGenerationRequest::getBlobSize() {
-	return env->CallFloatMethod(noiseGenerationRequest, getBlobSizeMethod);
+	return env->CallFloatMethod(noiseRequestClass, getBlobSizeMethod);
 } 

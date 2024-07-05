@@ -4,16 +4,15 @@
 
 class NoiseGenerationRequest {
 private:
-	JNIEnv* env;
-
-private:
-	static jclass noiseGenerationRequest;
-
 	static jmethodID getRegionXMethod;
 	static jmethodID getRegionYMethod;
 	static jmethodID getMaterialMinHeightMethod;
 	static jmethodID getMaterialMaxHeightMethod;
 	static jmethodID getBlobSizeMethod;
+
+protected:
+	jclass noiseRequestClass;
+	JNIEnv* env;
 
 public:
 	static int HEIGHT_SIZE;
