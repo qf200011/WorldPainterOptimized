@@ -22,6 +22,6 @@ public:
 	int getRegionY();
 	int getMinHeight();
 	int getMaxHeight();
-	int getBlobSize();
+	float getBlobSize();
 };
 

@@ -87,6 +87,7 @@
   <ItemGroup>
     <ClInclude Include="JavaClassWrappers\GPUMemoryBlock.h" />
     <ClInclude Include="JavaClassWrappers\GPUNoiseRequest.h" />
+    <ClInclude Include="JavaClassWrappers\JavaRandom.h" />
     <ClInclude Include="JavaClassWrappers\JavaWrapper.h" />
     <ClInclude Include="JavaClassWrappers\NoiseGenerationRequest.h" />
     <ClInclude Include="JavaClassWrappers\ResourceNoiseGenerationRequest.h" />
@@ -94,13 +95,16 @@
     <ClInclude Include="jni_md.h" />
     <ClInclude Include="NoiseGeneration.h" />
     <ClInclude Include="org_pepsoft_worldpainter_exporting_NoiseHardwareAccelerator.h" />
+    <ClInclude Include="Inputs\NoiseInput.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="JavaClassWrappers\GPUMemoryBlock.cpp" />
     <ClCompile Include="JavaClassWrappers\GPUNoiseRequest.cpp" />
+    <ClCompile Include="JavaClassWrappers\JavaRandom.cpp" />
     <ClCompile Include="JavaClassWrappers\NoiseGenerationRequest.cpp" />
     <ClCompile Include="JavaClassWrappers\ResourceNoiseGenerationRequest.cpp" />
     <ClCompile Include="JavaClassWrappers\JavaWrapper.cpp" />
+    <ClCompile Include="Inputs\NoiseInput.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

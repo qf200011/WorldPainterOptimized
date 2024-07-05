@@ -26,6 +26,6 @@ int NoiseGenerationRequest::getMaxHeight() {
 	return env->CallIntMethod(javaObject, getMaxHeightMethod);
 } 
 
-int NoiseGenerationRequest::getBlobSize() {
+float NoiseGenerationRequest::getBlobSize() {
 	return env->CallFloatMethod(javaObject, getBlobSizeMethod);
 } 

@@ -5,3 +5,8 @@ JavaWrapper::JavaWrapper(JNIEnv* env, jobject javaObject, std::string javaClassS
 	this->javaObject = javaObject;
 	this->javaClass = env->FindClass(javaClassString.c_str());
 }
+
+JavaWrapper::JavaWrapper(JNIEnv* env, std::string javaClassString) {
+	this->env = env;
+	this->javaClass = env->FindClass(javaClassString.c_str());
+}

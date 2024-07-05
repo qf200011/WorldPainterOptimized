@@ -14,13 +14,30 @@ private:
     jmethodID getOutputGPUPointerMethod;
     jmethodID getCompactedOutputGPUPointerMethod;
 
+    jmethodID setxGPUPointerMethod;
+    jmethodID setyGPUPointerMethod;
+    jmethodID setzGPUPointerMethod;
+    jmethodID setpGPUPointerMethod;
+    jmethodID setOutputGPUPointerMethod;
+    jmethodID setCompactedOutputGPUPointerMethod;
+
 public:
 	GPUMemoryBlock(JNIEnv* env, jobject gpuMemoryBlockObject);
+    GPUMemoryBlock(JNIEnv* env);
+
+    jobject getJavaObject();
 
     long long getxGPUPointer();
     long long getyGPUPointer();
     long long getzGPUPointer();
     long long getpGPUPointer();
     long long getOutputGPUPointer();
-    long long getcompactedOutputGPUPointer();
+    long long getCompactedOutputGPUPointer();
+
+    void setxGPUPointer(long long xGPUPointer);
+    void setyGPUPointer(long long yGPUPointer);
+    void setzGPUPointer(long long zGPUPointer);
+    void setpGPUPointer(long long pGPUPointer);
+    void setOutputGPUPointer(long long outputGPUPointer);
+    void setCompactedOutputGPUPointer(long long compactedOutputGPUPointer);
 };
