@@ -6,11 +6,11 @@
 
 class ResourceNoiseGenerationRequest : public NoiseGenerationRequest {
 private:
-	static jmethodID getChancesMethod;
-	static jmethodID getSeedMethod;
+	jmethodID getChancesMethod;
+	jmethodID getSeedMethod;
 
 public:
-	ResourceNoiseGenerationRequest(JNIEnv* env);
+	ResourceNoiseGenerationRequest(JNIEnv* env, jobject resourceNoiseGenerationRequestObject);
 
 	float* getChances();
 	long getSeed();

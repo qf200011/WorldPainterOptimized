@@ -2,22 +2,21 @@
 
 #include <jni.h>
 
-class NoiseGenerationRequest {
+#include "JavaWrapper.h"
+
+class NoiseGenerationRequest : protected JavaWrapper {
 private:
-	static jmethodID getRegionXMethod;
-	static jmethodID getRegionYMethod;
-	static jmethodID getMaterialMinHeightMethod;
-	static jmethodID getMaterialMaxHeightMethod;
-	static jmethodID getBlobSizeMethod;
+	jmethodID getRegionXMethod;
+	jmethodID getRegionYMethod;
+	jmethodID getMaterialMinHeightMethod;
+	jmethodID getMaterialMaxHeightMethod;
+	jmethodID getBlobSizeMethod;
 
 protected:
-	jclass noiseRequestClass;
-	JNIEnv* env;
+	NoiseGenerationRequest(JNIEnv* env, jobject noiseGenerationRequestObject, std::string javaClassString);
 
 public:
 	static int HEIGHT_SIZE;
-
-	NoiseGenerationRequest(JNIEnv* env);
 
 	int getRegionX();
 	int getRegionY();

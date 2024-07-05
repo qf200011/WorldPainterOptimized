@@ -1,17 +1,15 @@
 #include "ResourceNoiseGenerationRequest.h"
 
-ResourceNoiseGenerationRequest::ResourceNoiseGenerationRequest(JNIEnv* env) : NoiseGenerationRequest(env){
-	noiseRequestClass = env->FindClass("org/pepsoft/worldpainter/exporting/gpuacceleration/ResourceNoiseGenerationRequest");
-
-	getChancesMethod= env->GetMethodID(noiseRequestClass, "getChances", "()[F");
-	getSeedMethod = env->GetMethodID(noiseRequestClass, "getSeed", "()J");
+ResourceNoiseGenerationRequest::ResourceNoiseGenerationRequest(JNIEnv* env, jobject resourceNoiseGenerationRequestObject) : NoiseGenerationRequest(env, resourceNoiseGenerationRequestObject,"org/pepsoft/worldpainter/exporting/gpuacceleration/ResourceNoiseGenerationRequest") {
+	getChancesMethod= env->GetMethodID(javaClass, "getChances", "()[F");
+	getSeedMethod = env->GetMethodID(javaClass, "getSeed", "()J");
 }
 
 float* ResourceNoiseGenerationRequest::getChances() {
-	jfloatArray chancesArray= (jfloatArray) env->CallObjectMethod(noiseRequestClass, getChancesMethod);
+	jfloatArray chancesArray= (jfloatArray) env->CallObjectMethod(javaObject, getChancesMethod);
 	return env->GetFloatArrayElements(chancesArray, 0);
 }
 
 long ResourceNoiseGenerationRequest::getSeed() {
-	return env->CallLongMethod(noiseRequestClass, getSeedMethod);
+	return env->CallLongMethod(javaObject, getSeedMethod);
 }

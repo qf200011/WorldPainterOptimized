@@ -1,13 +1,12 @@
 #pragma once
 
+#include "JavaWrapper.h"
+
 #include <jni.h>
 
-class GPUMemoryBlock {
+
+class GPUMemoryBlock : public JavaWrapper {
 private:
-    JNIEnv* env;
-
-    jclass gpuMemoryBlockClass;
-
     jmethodID getxGPUPointerMethod;
     jmethodID getyGPUPointerMethod;
     jmethodID getzGPUPointerMethod;
@@ -16,7 +15,7 @@ private:
     jmethodID getCompactedOutputGPUPointerMethod;
 
 public:
-	GPUMemoryBlock(JNIEnv* env);
+	GPUMemoryBlock(JNIEnv* env, jobject gpuMemoryBlockObject);
 
     long getxGPUPointer();
     long getyGPUPointer();
