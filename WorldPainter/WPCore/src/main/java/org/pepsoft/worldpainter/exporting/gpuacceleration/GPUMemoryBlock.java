@@ -7,15 +7,15 @@ public class GPUMemoryBlock{
     private final long zGPUPointer;
     private final long pGPUPointer;
     private final long outputGPUPointer;
-    private final long compactedGPUPointer;
+    private final long compactedOutputGPUPointer;
 
-    public GPUMemoryBlock(long xGPUPointer, long yGPUPointer, long zGPUPointer, long pGPUPointer, long outputGPUPointer, long compactedGPUPointer) {
+    public GPUMemoryBlock(long xGPUPointer, long yGPUPointer, long zGPUPointer, long pGPUPointer, long outputGPUPointer, long compactedOutputGPUPointer) {
         this.xGPUPointer = xGPUPointer;
         this.yGPUPointer = yGPUPointer;
         this.zGPUPointer = zGPUPointer;
         this.pGPUPointer = pGPUPointer;
         this.outputGPUPointer = outputGPUPointer;
-        this.compactedGPUPointer = compactedGPUPointer;
+        this.compactedOutputGPUPointer = compactedOutputGPUPointer;
     }
 
     public GPUMemoryBlock() {
@@ -42,7 +42,7 @@ public class GPUMemoryBlock{
         return outputGPUPointer;
     }
 
-    public long getCompactedGPUPointer() {
-        return compactedGPUPointer;
+    public long getCompactedOutputGPUPointer() {
+        return compactedOutputGPUPointer;
     }
 }
