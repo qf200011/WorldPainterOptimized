@@ -8,8 +8,8 @@ class NoiseGenerationRequest : protected JavaWrapper {
 private:
 	jmethodID getRegionXMethod;
 	jmethodID getRegionYMethod;
-	jmethodID getMaterialMinHeightMethod;
-	jmethodID getMaterialMaxHeightMethod;
+	jmethodID getMinHeightMethod;
+	jmethodID getMaxHeightMethod;
 	jmethodID getBlobSizeMethod;
 
 protected:
@@ -20,8 +20,8 @@ public:
 
 	int getRegionX();
 	int getRegionY();
-	int getMaterialMinHeight();
-	int getMaterialMaxHeight();
+	int getMinHeight();
+	int getMaxHeight();
 	int getBlobSize();
 };
 
