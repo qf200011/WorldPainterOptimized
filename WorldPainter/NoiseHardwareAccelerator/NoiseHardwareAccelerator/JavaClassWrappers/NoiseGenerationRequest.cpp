@@ -1,6 +1,8 @@
 #include "NoiseGenerationRequest.h"
 
 NoiseGenerationRequest::NoiseGenerationRequest(JNIEnv* env) {
+	this->env = env;
+
 	noiseRequestClass = env->FindClass("org/pepsoft/worldpainter/exporting/gpuacceleration/NoiseGenerationRequest");
 
 	getRegionXMethod = env->GetMethodID(noiseRequestClass, "getRegionX", "()I");
