@@ -10,26 +10,26 @@ GPUMemoryBlock::GPUMemoryBlock(JNIEnv* env, jobject gpuMemoryBlockObject) : Java
     getCompactedOutputGPUPointerMethod = env->GetMethodID(javaClass, "getCompactedOutputGPUPointer", "()J");
 }
 
-long GPUMemoryBlock::getxGPUPointer() {
+long long GPUMemoryBlock::getxGPUPointer() {
     return env->CallLongMethod(javaObject, getxGPUPointerMethod);
 }
 
-long GPUMemoryBlock::getyGPUPointer() {
+long long GPUMemoryBlock::getyGPUPointer() {
     return env->CallLongMethod(javaObject, getyGPUPointerMethod);
 }
 
-long GPUMemoryBlock::getzGPUPointer() {
+long long GPUMemoryBlock::getzGPUPointer() {
     return env->CallLongMethod(javaObject, getzGPUPointerMethod);
 }
 
-long GPUMemoryBlock::getpGPUPointer() {
+long long GPUMemoryBlock::getpGPUPointer() {
     return env->CallLongMethod(javaObject, getpGPUPointerMethod);
 }
 
-long GPUMemoryBlock::getOutputGPUPointer() {
+long long GPUMemoryBlock::getOutputGPUPointer() {
     return env->CallLongMethod(javaObject, getOutputGPUPointerMethod);
 }
 
-long GPUMemoryBlock::getcompactedOutputGPUPointer() {
+long long GPUMemoryBlock::getcompactedOutputGPUPointer() {
     return env->CallLongMethod(javaObject, getCompactedOutputGPUPointerMethod);
 }

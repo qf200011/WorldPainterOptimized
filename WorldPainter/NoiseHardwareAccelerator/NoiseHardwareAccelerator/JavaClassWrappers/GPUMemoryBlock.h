@@ -17,10 +17,10 @@ private:
 public:
 	GPUMemoryBlock(JNIEnv* env, jobject gpuMemoryBlockObject);
 
-    long getxGPUPointer();
-    long getyGPUPointer();
-    long getzGPUPointer();
-    long getpGPUPointer();
-    long getOutputGPUPointer();
-    long getcompactedOutputGPUPointer();
+    long long getxGPUPointer();
+    long long getyGPUPointer();
+    long long getzGPUPointer();
+    long long getpGPUPointer();
+    long long getOutputGPUPointer();
+    long long getcompactedOutputGPUPointer();
 };
