@@ -26,7 +26,7 @@
 #define height 32
 
 cudaError_t noiseWithCuda(int* p, float* chances, float* regionArrayX, float* regionArrayY, float* regionArrayZ, bool* output, int& outputSize, int totalHeight, long long& dev_regionArrayXPtr, long long& dev_regionArrayYPtr, long long& dev_regionArrayZPtr, long long& dev_pPtr, long long& dev_outputPtr, long long& dev_compactedOutputPtr);
-void getRegionArray(float* regionArrayX, float* regionArrayY, float* regionArrayZ, int minHeight, int maxHeight, int heightOffset, int regionX, int regionY, float blobSize);
+void getRegionArray(float* regionArrayX, float* regionArrayY, float* regionArrayZ, int minHeight, int maxHeight, int regionX, int regionY, float blobSize);
 void getPArray(int* p, JNIEnv* env, jlong seed);
 void swap(int* array, int index1, int index2);
 void freeCudaMemory(int* dev_p, float* dev_regionArrayX, float* dev_regionArrayY, float* dev_regionArrayZ, bool* dev_output, int* dev_compactedOutput);
@@ -279,7 +279,7 @@ void freeCudaMemory(int* dev_p, float* dev_regionArrayX, float* dev_regionArrayY
 }
 
 
-void getRegionArray(float* regionArrayX, float* regionArrayY, float* regionArrayZ, int minHeight, int maxHeight, int regionX, int regionY, float blobSize, int heightOffset) {
+void getRegionArray(float* regionArrayX, float* regionArrayY, float* regionArrayZ, int minHeight, int maxHeight, int regionX, int regionY, float blobSize) {
 
     int minTileX = regionX * 4;
     int minTileY = regionY * 4;
@@ -345,7 +345,7 @@ void swap(int* array, int index1, int index2) {
     array[index2] = temp;
 }
 
-void getDataFromRequest(JNIEnv* env, jobject request, jlong& materialSeed, jint& regionX, jint& regionY, jint& materialMinHeight, jint& materialMaxHeight, jint& heightOffset, jfloat& blobSize, jlong& regionXPtr, jlong& regionYPtr, jlong& regionZPtr, jlong& pPtr, jlong& outputPtr, jlong& compactedOutputPtr, int*& outputArray, float*& chances) {
+void getDataFromRequest(JNIEnv* env, jobject request, jlong& materialSeed, jint& regionX, jint& regionY, jint& materialMinHeight, jint& materialMaxHeight, jfloat& blobSize, jlong& regionXPtr, jlong& regionYPtr, jlong& regionZPtr, jlong& pPtr, jlong& outputPtr, jlong& compactedOutputPtr, int*& outputArray, float*& chances) {
     jclass gpuNoiseRequestClass = env->FindClass("org/pepsoft/worldpainter/exporting/NoiseHardwareAccelerator$GPUNoiseRequest");
     jclass gpuMemoryBlockClass = env->FindClass("org/pepsoft/worldpainter/exporting/gpuacceleration/GPUMemoryBlock");
     
@@ -359,7 +359,6 @@ void getDataFromRequest(JNIEnv* env, jobject request, jlong& materialSeed, jint&
     jmethodID getRegionYMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getRegionY", "()I");
     jmethodID getMaterialMinHeightMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getMinHeight", "()I");
     jmethodID getMaterialMaxHeightMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getMaxHeight", "()I");
-    jmethodID getMaterialHeightOffset = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getHeightOffset", "()I");
     jmethodID getBlobSizeMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getBlobSize", "()F");
     jmethodID getChancesMethod = env->GetMethodID(noiseHardwareAcceleratorRequestClass, "getChances", "()[F");
 
@@ -378,7 +377,6 @@ void getDataFromRequest(JNIEnv* env, jobject request, jlong& materialSeed, jint&
     regionY = env->CallIntMethod(noiseGnerationRequest, getRegionYMethod);
     materialMinHeight = env->CallIntMethod(noiseGnerationRequest, getMaterialMinHeightMethod);
     materialMaxHeight = env->CallIntMethod(noiseGnerationRequest, getMaterialMaxHeightMethod);
-    heightOffset = env->CallIntMethod(noiseGnerationRequest, getMaterialHeightOffset);
     blobSize = env->CallFloatMethod(noiseGnerationRequest, getBlobSizeMethod);
     regionXPtr = env->CallLongMethod(gpuMemoryBlock, getxGPUPointerMethod);
     regionYPtr = env->CallLongMethod(gpuMemoryBlock, getyGPUPointerMethod);
@@ -424,7 +422,6 @@ JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_gpuacceleratio
     jint regionY;
     jint materialMinHeight;
     jint materialMaxHeight;
-    jint heightOffset;
     jlong dev_regionXPtr;
     jlong dev_regionYPtr;
     jlong dev_regionZPtr;
@@ -436,7 +433,7 @@ JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_gpuacceleratio
     int outputSize;
     float blobSize;
 
-    getDataFromRequest(env, request, materialSeed, regionX, regionY, materialMinHeight, materialMaxHeight,heightOffset, blobSize, dev_regionXPtr, dev_regionYPtr, dev_regionZPtr, dev_pPtr, dev_outputPtr, dev_compactedOutputPtr, outputArray, chances);
+    getDataFromRequest(env, request, materialSeed, regionX, regionY, materialMinHeight, materialMaxHeight, blobSize, dev_regionXPtr, dev_regionYPtr, dev_regionZPtr, dev_pPtr, dev_outputPtr, dev_compactedOutputPtr, outputArray, chances);
 
 
     const int totalHeight = materialMaxHeight - materialMinHeight;
@@ -448,7 +445,7 @@ JNIEXPORT jobject JNICALL Java_org_pepsoft_worldpainter_exporting_gpuacceleratio
     //[TILE_SIZE * TILES_PER_REGION_AXIS] [TILE_SIZE * TILES_PER_REGION_AXIS] [totalHeight]
     regionArrayZ = new float[totalHeight];
 
-    getRegionArray(regionArrayX, regionArrayY, regionArrayZ, materialMinHeight, materialMaxHeight, regionX, regionY,blobSize,heightOffset);
+    getRegionArray(regionArrayX, regionArrayY, regionArrayZ, materialMinHeight, materialMaxHeight, regionX, regionY,blobSize);
 
 
     getPArray(p, env, materialSeed);

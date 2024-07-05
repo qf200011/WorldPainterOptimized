@@ -9,12 +9,10 @@ public abstract class NoiseGenerationRequest {
 
     private static final Logger log = LoggerFactory.getLogger(NoiseGenerationRequest.class);
     //request info
-    private final long seed;
     private final int regionX;
     private final int regionY; //y direction on a map, not in game
     private final int minHeight;
     private final int maxHeight;
-    private final int heightOffset;
     private final float blobSize;
 
     private final GPUOptimizable gpuOptimizable;
@@ -22,22 +20,16 @@ public abstract class NoiseGenerationRequest {
     public static final int HEIGHT_SIZE=32;
 
 
-    public NoiseGenerationRequest(long seed, int regionX, int regionY, int minHeight, int maxHeight, int heightOffset, float blobSize, GPUOptimizable gpuOptimizable) {
-        this.seed = seed;
+    public NoiseGenerationRequest( int regionX, int regionY, int minHeight, int maxHeight, float blobSize, GPUOptimizable gpuOptimizable) {
         this.regionX = regionX;
         this.regionY = regionY;
         this.minHeight = minHeight;
         this.maxHeight = maxHeight;
-        this.heightOffset=heightOffset;
         this.blobSize=blobSize;
         this.gpuOptimizable=gpuOptimizable;
     }
 
     public abstract NoiseHardwareAcceleratorResponse getRegionNoiseData(NoiseHardwareAccelerator.GPUNoiseRequest request);
-
-    public long getSeed() {
-        return seed;
-    }
 
     public int getRegionX() {
         return regionX;
@@ -53,10 +45,6 @@ public abstract class NoiseGenerationRequest {
 
     public int getMaxHeight() {
         return maxHeight;
-    }
-
-    public int getHeightOffset() {
-        return heightOffset;
     }
 
     public float getBlobSize() {
