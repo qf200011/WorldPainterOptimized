@@ -291,7 +291,7 @@ public class ResourcesExporter extends AbstractLayerExporter<Resources> implemen
             int maxMaterialHeight = Math.min(maxLevels[materialIndex],maxSubSurfaceHeight);
             int heightSize = NoiseGenerationRequest.HEIGHT_SIZE;
 
-            for (int startingHeight=minMaterialHeight; startingHeight<=maxMaterialHeight; startingHeight=startingHeight+heightSize) { //todo, including max?
+            for (int startingHeight=minMaterialHeight; startingHeight<maxMaterialHeight; startingHeight=startingHeight+heightSize) { //todo, including max?
                 int maxHeight=Math.min(startingHeight+heightSize,maxMaterialHeight);
                 ResourceNoiseGenerationRequest resourceNoiseHardwareAcceleratorRequest = new ResourceNoiseGenerationRequest(seed,region.x,region.y,startingHeight,maxHeight,blobSize,this,chances[materialIndex]);
 
